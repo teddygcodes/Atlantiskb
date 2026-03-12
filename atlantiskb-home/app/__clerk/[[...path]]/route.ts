@@ -5,7 +5,7 @@ const HOP_BY_HOP = new Set([
   'te', 'trailer', 'transfer-encoding', 'upgrade',
 ])
 
-const CLERK_BASE = 'https://frontier-api.clerk.services'
+const CLERK_BASE = 'https://npm.clerk.dev'
 
 async function handler(
   request: NextRequest,
@@ -14,6 +14,9 @@ async function handler(
   const { path = [] } = await params
   const targetUrl = new URL(`/${path.join('/')}`, CLERK_BASE)
   targetUrl.search = request.nextUrl.search
+
+  console.log('[clerk-proxy] incoming:', request.method, `/${path.join('/')}`)
+  console.log('[clerk-proxy] target:', targetUrl.toString())
 
   const headers = new Headers()
   request.headers.forEach((value, key) => {
@@ -28,6 +31,8 @@ async function handler(
     body: hasBody ? request.body : undefined,
     ...(hasBody && { duplex: 'half' }),
   } as RequestInit)
+
+  console.log('[clerk-proxy] response status:', response.status)
 
   const responseHeaders = new Headers()
   response.headers.forEach((value, key) => {
