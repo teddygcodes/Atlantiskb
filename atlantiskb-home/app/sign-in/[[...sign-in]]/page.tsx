@@ -9,28 +9,43 @@ export default function SignInPage() {
   const router = useRouter()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [localError, setLocalError] = useState('')
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
+    setLocalError('')
 
-    const { error } = await signIn.password({
-      identifier: email,
-      password,
-    })
-
-    if (error) return
-
-    if (signIn.status === 'complete') {
-      await signIn.finalize({
-        navigate: ({ decorateUrl }) => {
-          const url = decorateUrl('/')
-          if (url.startsWith('http')) {
-            window.location.href = url
-          } else {
-            router.push(url)
-          }
-        },
+    try {
+      const { error } = await signIn.password({
+        identifier: email,
+        password,
       })
+
+      if (error) {
+        setLocalError(error.longMessage ?? error.message ?? 'Sign in failed.')
+        return
+      }
+
+      if (signIn.status === 'complete') {
+        await signIn.finalize({
+          navigate: ({ decorateUrl }) => {
+            const url = decorateUrl('/')
+            if (url.startsWith('http')) {
+              window.location.href = url
+            } else {
+              router.push(url)
+            }
+          },
+        })
+      } else if (signIn.status === 'needs_second_factor') {
+        setLocalError('Multi-factor authentication is enabled on your account. Disable it in Clerk Dashboard → Configure → User & Authentication → Multi-factor.')
+      } else {
+        setLocalError('Sign in failed. Please try again.')
+        console.error('[sign-in] unexpected status:', signIn.status, signIn)
+      }
+    } catch (err: unknown) {
+      setLocalError(err instanceof Error ? err.message : 'An unexpected error occurred.')
+      console.error('[sign-in]', err)
     }
   }
 
@@ -77,7 +92,6 @@ export default function SignInPage() {
           </span>
         </div>
 
-        {/* Heading */}
         <h1
           style={{
             fontSize: '24px',
@@ -93,7 +107,6 @@ export default function SignInPage() {
           Use your Atlantis KB account
         </p>
 
-        {/* Form */}
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
             <label htmlFor="email" style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-secondary)' }}>
@@ -151,11 +164,9 @@ export default function SignInPage() {
             )}
           </div>
 
-          {errors?.global && errors.global.length > 0 && (
+          {localError && (
             <p style={{ fontSize: '13px', color: 'var(--accent)', margin: 0 }}>
-              {(errors.global[0] as { longMessage?: string; message?: string }).longMessage ??
-                (errors.global[0] as { longMessage?: string; message?: string }).message ??
-                'An error occurred. Please try again.'}
+              {localError}
             </p>
           )}
 
