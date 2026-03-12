@@ -1,5 +1,7 @@
 'use client'
 
+import Link from 'next/link'
+
 interface TopbarProps {
   initials: string
 }
@@ -65,8 +67,10 @@ export default function Topbar({ initials }: TopbarProps) {
         </span>
       </div>
 
-      {/* Right: avatar */}
-      <div
+      {/* Right: avatar → account settings */}
+      <Link
+        href="/account"
+        title="Account settings"
         style={{
           width: '32px',
           height: '32px',
@@ -81,10 +85,11 @@ export default function Topbar({ initials }: TopbarProps) {
           letterSpacing: '0.02em',
           flexShrink: 0,
           userSelect: 'none',
+          textDecoration: 'none',
         }}
       >
         {initials}
-      </div>
+      </Link>
     </header>
   )
 }
