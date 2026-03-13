@@ -104,19 +104,24 @@ function PredictionGrid({ predictions, unit }: { predictions: Prediction[]; unit
     )
   }
   return (
-    <div style={{ display: 'flex', gap: 12, marginTop: 14 }}>
+    <div
+      style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+        gap: 12,
+        marginTop: 18,
+        paddingTop: 14,
+        borderTop: '1px solid var(--border)',
+      }}
+    >
       {predictions.map((p) => (
         <div
           key={p.days}
           style={{
-            flex: 1,
-            background: 'var(--bg)',
-            border: '1px solid var(--border)',
-            borderRadius: 6,
-            padding: '8px 10px',
+            padding: '2px 0',
           }}
         >
-          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 2 }}>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>
             +{p.days}d forecast
           </div>
           <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>
@@ -160,7 +165,7 @@ function MetalChart({ data, unit }: { data: MetalData; unit: string }) {
       </div>
 
       {/* Chart */}
-      <ResponsiveContainer width="100%" height={220}>
+      <ResponsiveContainer width="100%" height={300}>
         <ComposedChart data={chartData} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
           <XAxis
@@ -246,7 +251,7 @@ function MetalCard({ metalKey, data }: { metalKey: MetalKey; data: MetalData }) 
         border: '1px solid var(--border)',
         borderRadius: 8,
         boxShadow: 'var(--shadow-sm)',
-        padding: '20px 20px 16px',
+        padding: '28px 28px 22px',
         flex: 1,
         minWidth: 0,
       }}
@@ -373,9 +378,9 @@ export default function ComexPage() {
   const lastSyncDate = newestHistoryDate ? formatDate(newestHistoryDate) : '—'
 
   return (
-    <div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 28 }}>
       {/* Header */}
-      <div style={{ marginBottom: 24 }}>
+      <div>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
           <div>
             <h1 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.01em' }}>
@@ -433,18 +438,26 @@ export default function ComexPage() {
       )}
 
       {!loading && !error && hasData && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 20, alignItems: 'start' }}>
-          <div style={{ gridColumn: 'span 2', display: 'flex', gap: 20, flexWrap: 'wrap' }}>
+        <>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+              gap: 24,
+              alignItems: 'stretch',
+            }}
+          >
             {METAL_KEYS.map((metalKey) => {
               const metalData = data?.[metalKey]
               if (!metalData || metalData.history.length === 0) return null
               return <MetalCard key={metalKey} metalKey={metalKey} data={metalData} />
             })}
           </div>
-          <div style={{ gridColumn: 'span 1' }}>
+
+          <div>
             <AgentPanel lastSyncDate={lastSyncDate} />
           </div>
-        </div>
+        </>
       )}
     </div>
   )
