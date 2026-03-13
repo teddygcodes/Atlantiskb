@@ -55,6 +55,14 @@ export interface RAGContext {
   prices: Record<MetalKey, PriceSummary>
 }
 
+const FALLBACK_RECENCY_DAYS = 30
+const STOP_WORDS = new Set([
+  'about', 'after', 'again', 'against', 'aluminum', 'also', 'among', 'because', 'been', 'before',
+  'between', 'comex', 'could', 'copper', 'does', 'from', 'have', 'into', 'just', 'market', 'metal',
+  'more', 'news', 'price', 'prices', 'should', 'their', 'there', 'these', 'this', 'those', 'under',
+  'what', 'when', 'where', 'which', 'while', 'would',
+])
+
 function toVectorLiteral(embedding: number[]): string {
   const clean = embedding.filter((value) => Number.isFinite(value))
   return `[${clean.join(',')}]`
@@ -71,78 +79,48 @@ function subDays(date: Date, days: number): Date {
   return next
 }
 
-export async function buildRAGContext(question: string, metals: MetalKey[]): Promise<RAGContext> {
-  const selectedMetals = metals.filter((metal): metal is MetalKey => METAL_KEYS.includes(metal))
-  const activeMetals = selectedMetals.length > 0 ? selectedMetals : METAL_KEYS
+function extractQuestionKeywords(question: string): string[] {
+  const words = question
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .split(/\s+/)
+    .filter((word) => word.length >= 4 && !STOP_WORDS.has(word))
 
-  let questionEmbedding: number[]
+  return [...new Set(words)].slice(0, 6)
+}
+
+async function fetchRelatedEvents(activeMetals: MetalKey[], articleDate: Date, articleId: string): Promise<PriceEventRow[]> {
+  const windowStart = subDays(articleDate, 3)
+  const windowEnd = new Date(articleDate)
+  windowEnd.setDate(windowEnd.getDate() + 3)
+
   try {
-    questionEmbedding = await embedText(question)
-  } catch (error) {
-    console.error('[comex-rag] embedding generation failed', {
-      error,
-      questionLength: question.length,
-      activeMetals,
-    })
-    throw new Error(`Embedding generation failed: ${error instanceof Error ? error.message : String(error)}`)
-  }
-
-  const vectorLiteral = toVectorLiteral(questionEmbedding)
-
-  const metalFilter = Prisma.join([...activeMetals, 'both'])
-  let similarRows: SimilarityRow[]
-  try {
-    similarRows = await db.$queryRaw<SimilarityRow[]>(Prisma.sql`
+    return await db.$queryRaw<PriceEventRow[]>(Prisma.sql`
       SELECT
         "id",
-        "snippet",
-        "url",
         "metal",
-        "publishedAt",
-        1 - ("embedding" <=> ${vectorLiteral}::vector) AS "similarity"
-      FROM "NewsArticle"
-      WHERE "embedding" IS NOT NULL
-        AND "metal" IN (${metalFilter})
-        AND 1 - ("embedding" <=> ${vectorLiteral}::vector) >= 0.60
-      ORDER BY "similarity" DESC
-      LIMIT 8
+        "date",
+        "direction",
+        "magnitude"
+      FROM "PriceEvent"
+      WHERE "metal" IN (${Prisma.join(activeMetals)})
+        AND "date" BETWEEN ${windowStart} AND ${windowEnd}
+      ORDER BY "date" DESC
     `)
   } catch (error) {
-    console.error('[comex-rag] vector retrieval query failed', {
+    console.error('[comex-rag] related events retrieval failed', {
       error,
-      activeMetals,
+      articleId,
     })
-    throw new Error(`Vector retrieval failed: ${error instanceof Error ? error.message : String(error)}`)
+    throw new Error(`Related price event retrieval failed: ${error instanceof Error ? error.message : String(error)}`)
   }
+}
 
+async function buildRetrievedArticles(similarRows: SimilarityRow[], activeMetals: MetalKey[]): Promise<RetrievedArticle[]> {
   const articles: RetrievedArticle[] = []
 
   for (const row of similarRows) {
-    const windowStart = subDays(row.publishedAt, 3)
-    const windowEnd = new Date(row.publishedAt)
-    windowEnd.setDate(windowEnd.getDate() + 3)
-
-    let relatedEvents: PriceEventRow[]
-    try {
-      relatedEvents = await db.$queryRaw<PriceEventRow[]>(Prisma.sql`
-        SELECT
-          "id",
-          "metal",
-          "date",
-          "direction",
-          "magnitude"
-        FROM "PriceEvent"
-        WHERE "metal" IN (${Prisma.join(activeMetals)})
-          AND "date" BETWEEN ${windowStart} AND ${windowEnd}
-        ORDER BY "date" DESC
-      `)
-    } catch (error) {
-      console.error('[comex-rag] related events retrieval failed', {
-        error,
-        articleId: row.id,
-      })
-      throw new Error(`Related price event retrieval failed: ${error instanceof Error ? error.message : String(error)}`)
-    }
+    const relatedEvents = await fetchRelatedEvents(activeMetals, row.publishedAt, row.id)
 
     articles.push({
       id: row.id,
@@ -160,6 +138,128 @@ export async function buildRAGContext(question: string, metals: MetalKey[]): Pro
       })),
     })
   }
+
+  return articles
+}
+
+async function fetchFallbackRows(question: string, activeMetals: MetalKey[]): Promise<SimilarityRow[]> {
+  const since = subDays(new Date(), FALLBACK_RECENCY_DAYS)
+  const keywords = extractQuestionKeywords(question)
+
+  const buildWhere = (includeRecency: boolean) => ({
+    metal: { in: [...activeMetals, 'both'] },
+    ...(includeRecency ? { publishedAt: { gte: since } } : {}),
+  })
+
+  let candidateRows = await db.newsArticle.findMany({
+    where: buildWhere(true),
+    orderBy: { publishedAt: 'desc' },
+    select: {
+      id: true,
+      snippet: true,
+      url: true,
+      metal: true,
+      publishedAt: true,
+    },
+    take: 24,
+  })
+
+  if (candidateRows.length === 0) {
+    candidateRows = await db.newsArticle.findMany({
+      where: buildWhere(false),
+      orderBy: { publishedAt: 'desc' },
+      select: {
+        id: true,
+        snippet: true,
+        url: true,
+        metal: true,
+        publishedAt: true,
+      },
+      take: 8,
+    })
+  }
+
+  const scored = candidateRows.map((row) => {
+    const snippet = row.snippet.toLowerCase()
+    const keywordHits = keywords.filter((term) => snippet.includes(term)).length
+    return {
+      ...row,
+      keywordHits,
+      similarity: keywordHits > 0 ? 0.45 + Math.min(keywordHits, 5) * 0.1 : 0.3,
+    }
+  })
+
+  const prioritized = scored
+    .sort((a, b) => {
+      if (b.keywordHits !== a.keywordHits) return b.keywordHits - a.keywordHits
+      return b.publishedAt.getTime() - a.publishedAt.getTime()
+    })
+    .slice(0, 8)
+
+  return prioritized.map((row) => ({
+    id: row.id,
+    snippet: row.snippet,
+    url: row.url,
+    metal: row.metal as MetalKey | 'both',
+    publishedAt: row.publishedAt,
+    similarity: row.similarity,
+  }))
+}
+
+export async function buildRAGContext(question: string, metals: MetalKey[]): Promise<RAGContext> {
+  const selectedMetals = metals.filter((metal): metal is MetalKey => METAL_KEYS.includes(metal))
+  const activeMetals = selectedMetals.length > 0 ? selectedMetals : METAL_KEYS
+
+  const hasVoyageApiKey = Boolean(process.env.VOYAGE_API_KEY)
+  let similarRows: SimilarityRow[] = []
+
+  if (hasVoyageApiKey) {
+    try {
+      const questionEmbedding = await embedText(question)
+      const vectorLiteral = toVectorLiteral(questionEmbedding)
+      const metalFilter = Prisma.join([...activeMetals, 'both'])
+
+      similarRows = await db.$queryRaw<SimilarityRow[]>(Prisma.sql`
+        SELECT
+          "id",
+          "snippet",
+          "url",
+          "metal",
+          "publishedAt",
+          1 - ("embedding" <=> ${vectorLiteral}::vector) AS "similarity"
+        FROM "NewsArticle"
+        WHERE "embedding" IS NOT NULL
+          AND "metal" IN (${metalFilter})
+          AND 1 - ("embedding" <=> ${vectorLiteral}::vector) >= 0.60
+        ORDER BY "similarity" DESC
+        LIMIT 8
+      `)
+    } catch (error) {
+      console.error('[comex-rag] semantic retrieval unavailable; falling back to recency path', {
+        error,
+        questionLength: question.length,
+        activeMetals,
+      })
+    }
+  } else {
+    console.warn('[comex-rag] VOYAGE_API_KEY missing; falling back to recency path', {
+      activeMetals,
+    })
+  }
+
+  if (similarRows.length === 0) {
+    try {
+      similarRows = await fetchFallbackRows(question, activeMetals)
+    } catch (error) {
+      console.error('[comex-rag] fallback retrieval query failed', {
+        error,
+        activeMetals,
+      })
+      throw new Error(`Fallback retrieval failed: ${error instanceof Error ? error.message : String(error)}`)
+    }
+  }
+
+  const articles = await buildRetrievedArticles(similarRows, activeMetals)
 
   const since90d = subDays(new Date(), 90)
   const prices = {} as Record<MetalKey, PriceSummary>
