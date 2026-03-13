@@ -5,7 +5,14 @@ const HOP_BY_HOP = new Set([
   'te', 'trailer', 'transfer-encoding', 'upgrade',
 ])
 
-const CLERK_BASE = 'https://npm.clerk.dev'
+// Derive the Clerk FAPI base URL from the publishable key.
+// Format: pk_test_{base64(frontendApi + "$")} or pk_live_{...}
+const pk = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ?? ''
+const b64 = pk.replace(/^pk_(test|live)_/, '')
+const frontendApi = Buffer.from(b64, 'base64').toString('utf-8').replace(/\$$/, '')
+const CLERK_BASE = `https://${frontendApi}`
+
+console.log('[clerk-proxy] base URL:', CLERK_BASE)
 
 async function handler(
   request: NextRequest,
