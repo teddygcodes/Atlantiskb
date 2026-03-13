@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { NextResponse } from "next/server";
 import Parser from "rss-parser";
+import { Prisma } from "@prisma/client";
 import { db as prisma } from "@/lib/db";
 import { embedBatch } from "@/lib/comex/embeddings";
 import { NEWS_SOURCES, inferMetal, isRelevant } from "@/lib/comex/news-sources";
@@ -90,6 +91,17 @@ function createCuid(seed: string): string {
   const random = randomBytes(10).toString("hex").slice(0, 16);
   const hash = createHash("sha1").update(seed).digest("hex").slice(0, 8);
   return `c${ts}${random}${hash}`.slice(0, 30);
+}
+
+function toNewsMetalSqlLiteral(metal: NewsMetal): Prisma.Sql {
+  switch (metal) {
+    case "copper":
+      return Prisma.sql`'copper'::"NewsMetal"`;
+    case "aluminum":
+      return Prisma.sql`'aluminum'::"NewsMetal"`;
+    case "both":
+      return Prisma.sql`'both'::"NewsMetal"`;
+  }
 }
 
 export async function GET() {
@@ -331,7 +343,15 @@ export async function GET() {
                 const snippet = snippets[index];
                 const embedding = embeddingsByIndex[index];
                 const metal = inferMetal(`${item.title} ${snippet}`);
+                const metalSql = toNewsMetalSqlLiteral(metal);
                 sourceResult.metalCounts[metal] += 1;
+
+                console.info("news.sync.insert_row", {
+                  source: source.name,
+                  insertPath: embedding ? "with_embedding" : "without_embedding",
+                  metal,
+                  url: item.url,
+                });
 
                 const rowCount = embedding
                   ? await tx.$executeRaw`
@@ -342,7 +362,7 @@ export async function GET() {
                       ${snippet},
                       ${item.url},
                       ${source.name},
-                      ${metal}::"NewsMetal",
+                      ${metalSql},
                       ${new Date(item.publishedAt)},
                       ${`[${embedding.join(",")}]`}::vector
                     )
@@ -356,7 +376,7 @@ export async function GET() {
                       ${snippet},
                       ${item.url},
                       ${source.name},
-                      ${metal}::"NewsMetal",
+                      ${metalSql},
                       ${new Date(item.publishedAt)}
                     )
                     ON CONFLICT ("url") DO NOTHING
@@ -425,6 +445,15 @@ export async function GET() {
     ok,
     degraded: false,
     readiness: schemaReadiness,
+    syncDiagnostics: {
+      vectorExtensionPresent: schemaReadiness.optional.vectorExtension,
+      embeddingColumnPresent: schemaReadiness.optional.embeddingColumn,
+      embeddingDimensionDetected: schemaReadiness.embeddingDimension,
+      embeddingColumnType: schemaReadiness.embeddingColumnType,
+      vectorSearchReady: schemaReadiness.optional.vectorSearchReady,
+      expectedEmbeddingDimension: schemaReadiness.expectedEmbeddingDimension,
+      embeddingDimensionMatches: schemaReadiness.embeddingDimensionMatches,
+    },
     message: ok
       ? "sync_completed"
       : "sync_completed_with_zero_inserts_or_errors",
