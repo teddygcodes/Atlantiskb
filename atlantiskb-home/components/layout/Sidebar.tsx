@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { NavLink } from './NavLink'
 import { UserButton } from '@clerk/nextjs'
-import { LayoutDashboard, Building2, Briefcase, Upload, Settings, Zap, Search, FileText } from 'lucide-react'
+import { LayoutDashboard, Building2, Briefcase, Upload, Settings, Zap, Search, FileText, Home } from 'lucide-react'
 
 export function Sidebar() {
   return (
@@ -38,6 +38,13 @@ export function Sidebar() {
 
       {/* Footer */}
       <div className="border-t border-gray-200 px-4 py-3">
+        <Link
+          href="/"
+          className="flex items-center gap-2 rounded px-2 py-1.5 text-xs text-gray-400 hover:bg-gray-100 hover:text-gray-600 mb-2"
+        >
+          <Home size={13} />
+          All tools
+        </Link>
         <div className="flex items-center justify-between">
           <UserButton
             appearance={{
