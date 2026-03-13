@@ -179,16 +179,35 @@ async function getDashboardData() {
   weekAgo.setDate(weekAgo.getDate() - 7)
   const realOnly = { recordOrigin: { not: 'DEMO' as const } }
 
-  const [totalCompanies, signalsThisWeek, recentImports, uncontactedHighScore, failedEnrichments] =
-    await Promise.all([
-      db.company.count({ where: realOnly }),
-      db.signal.count({ where: { createdAt: { gte: weekAgo }, company: realOnly } }),
-      db.crawlJob.count({ where: { sourceType: 'CSV_IMPORT', createdAt: { gte: weekAgo } } }),
-      db.company.count({ where: { leadScore: { gte: 60 }, status: 'NEW', ...realOnly } }),
-      db.company.count({ where: { lastEnrichedAt: null, ...realOnly } }),
-    ])
+  try {
+    const [totalCompanies, signalsThisWeek, recentImports, uncontactedHighScore, failedEnrichments] =
+      await Promise.all([
+        db.company.count({ where: realOnly }),
+        db.signal.count({ where: { createdAt: { gte: weekAgo }, company: realOnly } }),
+        db.crawlJob.count({ where: { sourceType: 'CSV_IMPORT', createdAt: { gte: weekAgo } } }),
+        db.company.count({ where: { leadScore: { gte: 60 }, status: 'NEW', ...realOnly } }),
+        db.company.count({ where: { lastEnrichedAt: null, ...realOnly } }),
+      ])
 
-  return { totalCompanies, signalsThisWeek, recentImports, uncontactedHighScore, failedEnrichments }
+    return {
+      totalCompanies,
+      signalsThisWeek,
+      recentImports,
+      uncontactedHighScore,
+      failedEnrichments,
+      hasError: false,
+    }
+  } catch (err) {
+    console.error('[dashboard] getDashboardData failed:', err)
+    return {
+      totalCompanies: 0,
+      signalsThisWeek: 0,
+      recentImports: 0,
+      uncontactedHighScore: 0,
+      failedEnrichments: 0,
+      hasError: true,
+    }
+  }
 }
 
 export default async function DashboardPage() {
@@ -200,6 +219,12 @@ export default async function DashboardPage() {
         <h1 className="text-base font-semibold text-gray-900">Dashboard</h1>
         <p className="text-xs text-gray-500 mt-0.5">Atlanta metro &amp; North Georgia contractor intelligence</p>
       </div>
+
+      {stats.hasError && (
+        <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-800">
+          We couldn&apos;t load live dashboard metrics right now. Please refresh in a moment.
+        </div>
+      )}
 
       {stats.totalCompanies === 0 && (
         <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800">
