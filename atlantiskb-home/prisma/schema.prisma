@@ -54,6 +54,22 @@ enum RecordOrigin {
   PERMIT_DISCOVERY
 }
 
+enum NewsMetal {
+  copper
+  aluminum
+  both
+}
+
+enum PriceDirection {
+  up
+  down
+}
+
+enum PriceMagnitude {
+  medium
+  large
+}
+
 model Company {
   id                   String        @id @default(cuid())
   createdAt            DateTime      @default(now())
@@ -185,10 +201,10 @@ model UserNote {
 }
 
 model Tag {
-  id        String       @id @default(cuid())
-  createdAt DateTime     @default(now())
-  updatedAt DateTime     @updatedAt
-  name      String       @unique
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  name      String   @unique
   color     String?
 
   companies CompanyTag[]
@@ -205,33 +221,33 @@ model CompanyTag {
 }
 
 model Permit {
-  id                    String    @id @default(cuid())
-  source                String    // "ACCELA_GWINNETT" | "ACCELA_COBB" | "ACCELA_HALLCO" | "ACCELA_ATLANTA" | "ENERGOV_FORSYTH" | "ENERGOV_JACKSON"
-  externalId            String
-  permitNumber          String
-  permitType            String    // "ELECTRICAL" | "BUILDING" | "MECHANICAL" | "OTHER"
-  description           String?
-  status                String    // "APPLIED" | "ISSUED" | "INSPECTED" | "CLOSED"
-  jobAddress            String?
-  county                String
-  jobValue              Float?
-  isResidential         Boolean   @default(false)
-  estimatedValueBucket  String?   // "UNDER_20K" | "20K_TO_100K" | "100K_TO_500K" | "500K_PLUS" | "UNKNOWN"
-  valueIsEstimated      Boolean   @default(false)
-  valueEstimatedAt      DateTime?
-  filedAt               DateTime
-  issuedAt              DateTime?
-  inspectionAt          DateTime?
-  closedAt              DateTime?
-  contractorName        String
-  contractorPhone       String?
-  contractorLicense     String?
-  companyId             String?
-  company               Company?  @relation(fields: [companyId], references: [id])
-  matchConfidence       Float?
-  matchedAt             DateTime?
-  createdAt             DateTime  @default(now())
-  updatedAt             DateTime  @updatedAt
+  id                   String    @id @default(cuid())
+  source               String // "ACCELA_GWINNETT" | "ACCELA_COBB" | "ACCELA_HALLCO" | "ACCELA_ATLANTA" | "ENERGOV_FORSYTH" | "ENERGOV_JACKSON"
+  externalId           String
+  permitNumber         String
+  permitType           String // "ELECTRICAL" | "BUILDING" | "MECHANICAL" | "OTHER"
+  description          String?
+  status               String // "APPLIED" | "ISSUED" | "INSPECTED" | "CLOSED"
+  jobAddress           String?
+  county               String
+  jobValue             Float?
+  isResidential        Boolean   @default(false)
+  estimatedValueBucket String? // "UNDER_20K" | "20K_TO_100K" | "100K_TO_500K" | "500K_PLUS" | "UNKNOWN"
+  valueIsEstimated     Boolean   @default(false)
+  valueEstimatedAt     DateTime?
+  filedAt              DateTime
+  issuedAt             DateTime?
+  inspectionAt         DateTime?
+  closedAt             DateTime?
+  contractorName       String
+  contractorPhone      String?
+  contractorLicense    String?
+  companyId            String?
+  company              Company?  @relation(fields: [companyId], references: [id])
+  matchConfidence      Float?
+  matchedAt            DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
 
   @@unique([source, externalId])
   @@index([county])
@@ -252,4 +268,27 @@ model CommodityPrice {
   createdAt      DateTime @default(now())
 
   @@unique([metal, settlementDate])
+}
+
+model NewsArticle {
+  id          String    @id @default(cuid())
+  snippet     String    @db.Text
+  url         String    @unique
+  metal       NewsMetal
+  publishedAt DateTime
+
+  @@index([publishedAt])
+  @@index([metal])
+}
+
+model PriceEvent {
+  id        String         @id @default(cuid())
+  metal     NewsMetal
+  date      DateTime
+  direction PriceDirection
+  magnitude PriceMagnitude
+
+  @@unique([metal, date])
+  @@index([metal])
+  @@index([date])
 }
