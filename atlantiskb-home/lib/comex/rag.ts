@@ -20,6 +20,16 @@ interface PriceEventRow {
   magnitude: 'medium' | 'large'
 }
 
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message
+  return String(error)
+}
+
+function isMissingRelationError(error: unknown, relation: string): boolean {
+  const message = getErrorMessage(error)
+  return message.includes(`relation "${relation}" does not exist`)
+}
+
 export interface RetrievedArticle {
   id: string
   snippet: string
@@ -108,11 +118,18 @@ export async function buildRAGContext(question: string, metals: MetalKey[]): Pro
       LIMIT 8
     `)
   } catch (error) {
+    if (isMissingRelationError(error, 'NewsArticle')) {
+      console.warn('[comex-rag] NewsArticle relation is missing. Returning empty article context.', {
+        activeMetals,
+      })
+      similarRows = []
+    } else {
     console.error('[comex-rag] vector retrieval query failed', {
       error,
       activeMetals,
     })
-    throw new Error(`Vector retrieval failed: ${error instanceof Error ? error.message : String(error)}`)
+    throw new Error(`Vector retrieval failed: ${getErrorMessage(error)}`)
+    }
   }
 
   const articles: RetrievedArticle[] = []
@@ -137,11 +154,18 @@ export async function buildRAGContext(question: string, metals: MetalKey[]): Pro
         ORDER BY "date" DESC
       `)
     } catch (error) {
+      if (isMissingRelationError(error, 'PriceEvent')) {
+        console.warn('[comex-rag] PriceEvent relation is missing. Returning article without related events.', {
+          articleId: row.id,
+        })
+        relatedEvents = []
+      } else {
       console.error('[comex-rag] related events retrieval failed', {
         error,
         articleId: row.id,
       })
-      throw new Error(`Related price event retrieval failed: ${error instanceof Error ? error.message : String(error)}`)
+      throw new Error(`Related price event retrieval failed: ${getErrorMessage(error)}`)
+      }
     }
 
     articles.push({
@@ -179,11 +203,18 @@ export async function buildRAGContext(question: string, metals: MetalKey[]): Pro
         },
       })
     } catch (error) {
+      if (isMissingRelationError(error, 'CommodityPrice')) {
+        console.warn('[comex-rag] CommodityPrice relation is missing. Returning null price summary.', {
+          metal,
+        })
+        rows = []
+      } else {
       console.error('[comex-rag] price history retrieval failed', {
         error,
         metal,
       })
-      throw new Error(`Price history retrieval failed for ${metal}: ${error instanceof Error ? error.message : String(error)}`)
+      throw new Error(`Price history retrieval failed for ${metal}: ${getErrorMessage(error)}`)
+      }
     }
 
     const current = rows.at(-1)?.close ?? null
@@ -206,11 +237,18 @@ export async function buildRAGContext(question: string, metals: MetalKey[]): Pro
         LIMIT 5
       `)
     } catch (error) {
+      if (isMissingRelationError(error, 'PriceEvent')) {
+        console.warn('[comex-rag] PriceEvent relation is missing. Returning no large events.', {
+          metal,
+        })
+        recentLargeEvents = []
+      } else {
       console.error('[comex-rag] large events retrieval failed', {
         error,
         metal,
       })
-      throw new Error(`Large event retrieval failed for ${metal}: ${error instanceof Error ? error.message : String(error)}`)
+      throw new Error(`Large event retrieval failed for ${metal}: ${getErrorMessage(error)}`)
+      }
     }
 
     prices[metal] = {
