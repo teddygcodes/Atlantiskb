@@ -1,6 +1,10 @@
 import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server'
 
-const isPublicRoute = createRouteMatcher(['/sign-in(.*)', '/__clerk(.*)'])
+const isPublicRoute = createRouteMatcher([
+  '/sign-in(.*)',
+  '/__clerk(.*)',
+  '/comex/api/prices/sync', // Vercel cron endpoint — no auth required
+])
 
 export default clerkMiddleware(async (auth, req) => {
   if (!isPublicRoute(req)) await auth.protect()

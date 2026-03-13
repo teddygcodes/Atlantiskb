@@ -239,3 +239,17 @@ model Permit {
   @@index([filedAt])
   @@index([status])
 }
+
+model CommodityPrice {
+  id             String   @id @default(cuid())
+  metal          String
+  sourceSymbol   String
+  close          Float
+  open           Float?
+  high           Float?
+  low            Float?
+  settlementDate DateTime
+  createdAt      DateTime @default(now())
+
+  @@unique([metal, settlementDate])
+}

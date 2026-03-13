@@ -21,4 +21,14 @@ export const tools: Tool[] = [
     url: '/leads',
     status: 'live',
   },
+  {
+    id: 'comex',
+    index: '02',
+    name: 'COMEX',
+    description:
+      'Real-time copper and aluminum futures prices from COMEX. Historical charts, moving averages, and 30/60/90-day linear regression forecasts.',
+    tag: 'Metals Pricing',
+    url: '/comex',
+    status: 'live',
+  },
 ]
