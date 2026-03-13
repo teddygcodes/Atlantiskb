@@ -331,62 +331,61 @@ export async function GET() {
           );
         }
 
-        const insertEnd = stageTimer(source.name, "insert_transaction");
+        const insertEnd = stageTimer(source.name, "insert_rows");
         sourceResult.inserted = await withTimeout(
-          "insert_transaction",
+          "insert_rows",
           STAGE_TIMEOUT_MS,
-          () =>
-            prisma.$transaction(async (tx) => {
-              let inserted = 0;
+          async () => {
+            let inserted = 0;
 
-              for (const [index, item] of toInsert.entries()) {
-                const snippet = snippets[index];
-                const embedding = embeddingsByIndex[index];
-                const metal = inferMetal(`${item.title} ${snippet}`);
-                const metalSql = toNewsMetalSqlLiteral(metal);
-                sourceResult.metalCounts[metal] += 1;
+            for (const [index, item] of toInsert.entries()) {
+              const snippet = snippets[index];
+              const embedding = embeddingsByIndex[index];
+              const metal = inferMetal(`${item.title} ${snippet}`);
+              const metalSql = toNewsMetalSqlLiteral(metal);
+              sourceResult.metalCounts[metal] += 1;
 
-                console.info("news.sync.insert_row", {
-                  source: source.name,
-                  insertPath: embedding ? "with_embedding" : "without_embedding",
-                  metal,
-                  url: item.url,
-                });
+              console.info("news.sync.insert_row", {
+                source: source.name,
+                insertPath: embedding ? "with_embedding" : "without_embedding",
+                metal,
+                url: item.url,
+              });
 
-                const rowCount = embedding
-                  ? await tx.$executeRaw`
-                    INSERT INTO "NewsArticle" ("id", "headline", "snippet", "url", "source", "metal", "publishedAt", "embedding")
-                    VALUES (
-                      ${createCuid(item.url + item.publishedAt)},
-                      ${item.title},
-                      ${snippet},
-                      ${item.url},
-                      ${source.name},
-                      ${metalSql},
-                      ${new Date(item.publishedAt)},
-                      ${`[${embedding.join(",")}]`}::vector
-                    )
-                    ON CONFLICT ("url") DO NOTHING
-                  `
-                  : await tx.$executeRaw`
-                    INSERT INTO "NewsArticle" ("id", "headline", "snippet", "url", "source", "metal", "publishedAt")
-                    VALUES (
-                      ${createCuid(item.url + item.publishedAt)},
-                      ${item.title},
-                      ${snippet},
-                      ${item.url},
-                      ${source.name},
-                      ${metalSql},
-                      ${new Date(item.publishedAt)}
-                    )
-                    ON CONFLICT ("url") DO NOTHING
-                  `;
+              const rowCount = embedding
+                ? await prisma.$executeRaw`
+                  INSERT INTO "NewsArticle" ("id", "headline", "snippet", "url", "source", "metal", "publishedAt", "embedding")
+                  VALUES (
+                    ${createCuid(item.url + item.publishedAt)},
+                    ${item.title},
+                    ${snippet},
+                    ${item.url},
+                    ${source.name},
+                    ${metalSql},
+                    ${new Date(item.publishedAt)},
+                    ${`[${embedding.join(",")}]`}::vector
+                  )
+                  ON CONFLICT ("url") DO NOTHING
+                `
+                : await prisma.$executeRaw`
+                  INSERT INTO "NewsArticle" ("id", "headline", "snippet", "url", "source", "metal", "publishedAt")
+                  VALUES (
+                    ${createCuid(item.url + item.publishedAt)},
+                    ${item.title},
+                    ${snippet},
+                    ${item.url},
+                    ${source.name},
+                    ${metalSql},
+                    ${new Date(item.publishedAt)}
+                  )
+                  ON CONFLICT ("url") DO NOTHING
+                `;
 
-                inserted += Number(rowCount);
-              }
+              inserted += Number(rowCount);
+            }
 
-              return inserted;
-            }),
+            return inserted;
+          },
         ).finally(insertEnd);
 
         console.info("news.sync.source_insert", {
@@ -448,11 +447,14 @@ export async function GET() {
     syncDiagnostics: {
       vectorExtensionPresent: schemaReadiness.optional.vectorExtension,
       embeddingColumnPresent: schemaReadiness.optional.embeddingColumn,
-      embeddingDimensionDetected: schemaReadiness.embeddingDimension,
+      embeddingDimensionDetected: schemaReadiness.optional.embeddingDimensionDetected,
       embeddingColumnType: schemaReadiness.embeddingColumnType,
       vectorSearchReady: schemaReadiness.optional.vectorSearchReady,
       expectedEmbeddingDimension: schemaReadiness.expectedEmbeddingDimension,
       embeddingDimensionMatches: schemaReadiness.embeddingDimensionMatches,
+      vectorSearchReadyReason: schemaReadiness.diagnostics.vectorSearchReadyReason,
+      embeddingDimensionSource: schemaReadiness.diagnostics.embeddingDimensionSource,
+      embeddingTypeLooksLikeVector: schemaReadiness.diagnostics.embeddingTypeLooksLikeVector,
     },
     message: ok
       ? "sync_completed"
