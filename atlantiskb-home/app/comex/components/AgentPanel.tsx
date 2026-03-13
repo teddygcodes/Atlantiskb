@@ -81,6 +81,7 @@ export default function AgentPanel({ lastSyncDate }: AgentPanelProps) {
   const [isStreaming, setIsStreaming] = useState(false)
   const [thinkingTick, setThinkingTick] = useState(0)
   const [error, setError] = useState<string | null>(null)
+  const [supportRequestId, setSupportRequestId] = useState<string | null>(null)
   const endRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
@@ -124,6 +125,7 @@ export default function AgentPanel({ lastSyncDate }: AgentPanelProps) {
 
     setInput('')
     setError(null)
+    setSupportRequestId(null)
     setIsStreaming(true)
     setMessages((prev) => [...prev, userMessage, assistantMessage])
 
@@ -136,6 +138,11 @@ export default function AgentPanel({ lastSyncDate }: AgentPanelProps) {
 
       if (!res.ok) {
         const fallbackMessage = 'Unable to get agent response'
+        const requestIdFromHeader = res.headers.get('x-request-id') || ''
+        if (requestIdFromHeader) {
+          setSupportRequestId(requestIdFromHeader)
+        }
+
         let diagnosticMessage: string | null = null
 
         try {
@@ -144,15 +151,24 @@ export default function AgentPanel({ lastSyncDate }: AgentPanelProps) {
             stage?: string
             error?: string
             detail?: string
+            code?: string
+            requestId?: string
           }
 
           const stage = typeof parsedError.stage === 'string' ? parsedError.stage : ''
           const errorMessage = typeof parsedError.error === 'string' ? parsedError.error : ''
           const detailMessage = typeof parsedError.detail === 'string' ? parsedError.detail : ''
+          const code = typeof parsedError.code === 'string' ? parsedError.code : ''
+          const requestIdFromBody = typeof parsedError.requestId === 'string' ? parsedError.requestId : ''
+          const requestId = requestIdFromBody || res.headers.get('x-request-id') || ''
           const reason = [errorMessage, detailMessage].filter(Boolean).join(' ')
 
+          if (requestId) {
+            setSupportRequestId(requestId)
+          }
+
           if (reason) {
-            const stageLabel = stage || 'unknown'
+            const stageLabel = stage || code || 'unknown'
             diagnosticMessage = `Agent error [${stageLabel}]: ${reason}`
           }
         } catch {
@@ -406,9 +422,16 @@ export default function AgentPanel({ lastSyncDate }: AgentPanelProps) {
         Not investment advice.
       </p>
 
+
       {error && (
         <p style={{ margin: '8px 0 0', fontSize: 12, color: 'var(--accent)' }}>
           {error}
+        </p>
+      )}
+
+      {supportRequestId && (
+        <p style={{ margin: '6px 0 0', fontSize: 11, color: 'var(--text-muted)' }}>
+          If you contact support, include request ID: <code>{supportRequestId}</code>
         </p>
       )}
     </section>
