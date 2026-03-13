@@ -9,6 +9,7 @@ export interface ComexSchemaReadiness {
   required: {
     newsArticleTable: boolean
     priceEventTable: boolean
+    commodityPriceTable: boolean
   }
   optional: {
     embeddingColumn: boolean
@@ -23,12 +24,14 @@ let lastLoggedFingerprint = ''
 function buildReadinessFromChecks(checks: {
   hasNewsArticleTable: boolean
   hasPriceEventTable: boolean
+  hasCommodityPriceTable: boolean
   hasEmbeddingColumn: boolean
   hasVectorExtension: boolean
 }): ComexSchemaReadiness {
   const required = {
     newsArticleTable: toBool(checks.hasNewsArticleTable),
     priceEventTable: toBool(checks.hasPriceEventTable),
+    commodityPriceTable: toBool(checks.hasCommodityPriceTable),
   }
 
   const optional = {
@@ -37,7 +40,7 @@ function buildReadinessFromChecks(checks: {
     vectorSearchReady: toBool(checks.hasEmbeddingColumn) && toBool(checks.hasVectorExtension),
   }
 
-  const ready = required.newsArticleTable && required.priceEventTable
+  const ready = required.newsArticleTable && required.priceEventTable && required.commodityPriceTable
 
   return {
     checkedAt: new Date().toISOString(),
@@ -78,6 +81,7 @@ export async function getComexSchemaReadiness(): Promise<ComexSchemaReadiness> {
       Array<{
         hasNewsArticleTable: boolean
         hasPriceEventTable: boolean
+        hasCommodityPriceTable: boolean
         hasEmbeddingColumn: boolean
         hasVectorExtension: boolean
       }>
@@ -97,6 +101,12 @@ export async function getComexSchemaReadiness(): Promise<ComexSchemaReadiness> {
       ) AS "hasPriceEventTable",
       EXISTS (
         SELECT 1
+        FROM information_schema.tables
+        WHERE table_schema = 'public'
+          AND table_name = 'CommodityPrice'
+      ) AS "hasCommodityPriceTable",
+      EXISTS (
+        SELECT 1
         FROM information_schema.columns
         WHERE table_schema = 'public'
           AND table_name = 'NewsArticle'
@@ -114,6 +124,7 @@ export async function getComexSchemaReadiness(): Promise<ComexSchemaReadiness> {
     const readiness = buildReadinessFromChecks({
       hasNewsArticleTable: toBool(row?.hasNewsArticleTable),
       hasPriceEventTable: toBool(row?.hasPriceEventTable),
+      hasCommodityPriceTable: toBool(row?.hasCommodityPriceTable),
       hasEmbeddingColumn: toBool(row?.hasEmbeddingColumn),
       hasVectorExtension: toBool(row?.hasVectorExtension),
     })
@@ -125,6 +136,7 @@ export async function getComexSchemaReadiness(): Promise<ComexSchemaReadiness> {
     const readiness = buildReadinessFromChecks({
       hasNewsArticleTable: false,
       hasPriceEventTable: false,
+      hasCommodityPriceTable: false,
       hasEmbeddingColumn: false,
       hasVectorExtension: false,
     })
