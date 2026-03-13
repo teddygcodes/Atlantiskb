@@ -9,9 +9,10 @@ interface TopbarProps {
   initials: string
   firstName?: string
   email?: string
+  pageLabel?: string
 }
 
-export default function Topbar({ initials, firstName, email }: TopbarProps) {
+export default function Topbar({ initials, firstName, email, pageLabel = 'Home' }: TopbarProps) {
   const [open, setOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
   const { signOut } = useClerk()
@@ -77,7 +78,7 @@ export default function Topbar({ initials, firstName, email }: TopbarProps) {
         }} />
 
         <span style={{ fontSize: '13px', color: 'rgba(255,255,255,0.7)', fontWeight: 400 }}>
-          Home
+          {pageLabel}
         </span>
       </div>
 

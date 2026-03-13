@@ -372,7 +372,7 @@ export default function ComexPage() {
     : null
 
   return (
-    <div style={{ maxWidth: 1100, margin: '0 auto', paddingBottom: 48 }}>
+    <div>
       {/* Header */}
       <div style={{ marginBottom: 24 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
