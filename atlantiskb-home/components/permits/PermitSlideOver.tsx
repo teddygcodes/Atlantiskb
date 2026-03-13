@@ -105,7 +105,7 @@ export function PermitSlideOver({ permitId, onClose, onUpdate }: PermitSlideOver
   // Load full permit on open
   useEffect(() => {
     setLoading(true)
-    fetch(`/api/permits/${permitId}`)
+    fetch(`/leads/api/permits/${permitId}`)
       .then(r => r.json())
       .then(data => setPermit(data as FullPermit))
       .catch(console.error)
@@ -124,7 +124,7 @@ export function PermitSlideOver({ permitId, onClose, onUpdate }: PermitSlideOver
     if (!q.trim()) { setHits([]); return }
     setSearchLoading(true)
     try {
-      const res = await fetch(`/api/companies?search=${encodeURIComponent(q)}&limit=10`)
+      const res = await fetch(`/leads/api/companies?search=${encodeURIComponent(q)}&limit=10`)
       const data = await res.json() as { data: CompanyHit[] }
       setHits(data.data ?? [])
     } catch (err) {
@@ -144,7 +144,7 @@ export function PermitSlideOver({ permitId, onClose, onUpdate }: PermitSlideOver
     if (!permit) return
     setSaving(true)
     try {
-      const patchRes = await fetch(`/api/permits/${permit.id}`, {
+      const patchRes = await fetch(`/leads/api/permits/${permit.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ companyId }),
@@ -153,7 +153,7 @@ export function PermitSlideOver({ permitId, onClose, onUpdate }: PermitSlideOver
       const cascadeCount = patchData.cascadeCount ?? 0
 
       // Re-fetch to get updated company relation
-      const updated = await fetch(`/api/permits/${permit.id}`).then(r => r.json()) as FullPermit
+      const updated = await fetch(`/leads/api/permits/${permit.id}`).then(r => r.json()) as FullPermit
       setPermit(updated)
       setSearch('')
       setHits([])
@@ -371,7 +371,7 @@ export function PermitSlideOver({ permitId, onClose, onUpdate }: PermitSlideOver
                   <div className="flex items-center gap-2 min-w-0">
                     <span className={`flex-shrink-0 w-1.5 h-1.5 rounded-full ${statusDot(permit.company.status)}`} />
                     <Link
-                      href={`/companies/${permit.company.id}`}
+                      href={`/leads/companies/${permit.company.id}`}
                       className="text-sm font-medium text-blue-600 hover:text-blue-800 hover:underline truncate"
                       onClick={e => e.stopPropagation()}
                     >

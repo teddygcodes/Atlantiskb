@@ -39,7 +39,7 @@ export function TopLeads() {
   async function handleMarkContacted(id: string) {
     setMarking(id)
     try {
-      await fetch(`/api/dashboard/company/${id}/contact`, { method: 'PATCH' })
+      await fetch(`/leads/api/dashboard/company/${id}/contact`, { method: 'PATCH' })
       setContactedIds((prev) => new Set([...prev, id]))
     } finally {
       setMarking(null)
@@ -79,7 +79,7 @@ export function TopLeads() {
                 {/* Name + score */}
                 <div className="flex items-start justify-between gap-2 mb-1">
                   <Link
-                    href={`/companies/${lead.id}`}
+                    href={`/leads/companies/${lead.id}`}
                     className="text-xs font-semibold text-gray-900 hover:text-blue-600 line-clamp-1"
                   >
                     {lead.name}

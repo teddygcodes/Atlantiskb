@@ -498,7 +498,7 @@ export function CompaniesTable({ companies, pagination }: CompaniesTableProps) {
                   onMouseLeave={() => { setHoveredCompany(null); setTooltipPos(null) }}
                 >
                   <Link
-                    href={`/companies/${company.id}`}
+                    href={`/leads/companies/${company.id}`}
                     className="font-medium text-gray-900 hover:text-blue-600 line-clamp-1"
                   >
                     {company.name}

@@ -13,7 +13,7 @@ export function EnrichButton({ companyId }: { companyId: string }) {
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch(`/api/enrich/company/${companyId}`, { method: 'POST' })
+      const res = await fetch(`/leads/api/enrich/company/${companyId}`, { method: 'POST' })
       const data = await res.json()
       if (!res.ok) {
         setError(data.error ?? 'Enrichment failed')

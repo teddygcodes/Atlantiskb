@@ -33,7 +33,7 @@ export function CountyPanel({ county, onClose }: CountyPanelProps) {
   useEffect(() => {
     setLoading(true)
     setError(null)
-    fetch(`/api/dashboard/county/${encodeURIComponent(county)}`)
+    fetch(`/leads/api/dashboard/county/${encodeURIComponent(county)}`)
       .then((r) => {
         if (!r.ok) throw new Error(`Failed to load county data (${r.status})`)
         return r.json()
@@ -59,7 +59,7 @@ export function CountyPanel({ county, onClose }: CountyPanelProps) {
       {/* View all link */}
       <div className="border-b border-gray-100 px-4 py-2">
         <Link
-          href={`/companies?county=${encodeURIComponent(county)}`}
+          href={`/leads/companies?county=${encodeURIComponent(county)}`}
           className="text-xs text-blue-600 hover:underline"
         >
           View all in Companies page →
@@ -78,7 +78,7 @@ export function CountyPanel({ county, onClose }: CountyPanelProps) {
           companies.map((c) => (
             <Link
               key={c.id}
-              href={`/companies/${c.id}`}
+              href={`/leads/companies/${c.id}`}
               className="block px-4 py-2.5 hover:bg-gray-50 transition-colors"
             >
               <div className="flex items-start justify-between gap-2 mb-1">
