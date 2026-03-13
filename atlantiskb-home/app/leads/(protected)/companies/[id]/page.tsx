@@ -77,7 +77,7 @@ export default async function CompanyDetailPage({ params }: Params) {
             {company.website && (
               <EnrichButton companyId={company.id} />
             )}
-            <Link href="/companies" className="btn-secondary text-xs">
+            <Link href="/leads/companies" className="btn-secondary text-xs">
               ← Back
             </Link>
           </div>

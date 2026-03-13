@@ -312,7 +312,7 @@ export function ImportFlow() {
             <button onClick={reset} className="btn-secondary text-xs">
               Import another file
             </button>
-            <Link href="/companies" className="btn-primary text-xs">
+            <Link href="/leads/companies" className="btn-primary text-xs">
               View companies →
             </Link>
           </div>

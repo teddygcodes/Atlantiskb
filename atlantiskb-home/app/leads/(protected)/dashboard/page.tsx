@@ -213,32 +213,32 @@ export default async function DashboardPage() {
           label="Companies"
           value={stats.totalCompanies}
           icon={<Building2 size={14} />}
-          href="/companies"
+          href="/leads/companies"
         />
         <SummaryCard
           label="Signals this week"
           value={stats.signalsThisWeek}
           icon={<Radio size={14} />}
-          href="/companies"
+          href="/leads/companies"
         />
         <SummaryCard
           label="Imports this week"
           value={stats.recentImports}
           icon={<Upload size={14} />}
-          href="/import"
+          href="/leads/import"
         />
         <SummaryCard
           label="Uncontacted 60+"
           value={stats.uncontactedHighScore}
           icon={<Target size={14} />}
-          href="/companies?minScore=60&status=NEW"
+          href="/leads/companies?minScore=60&status=NEW"
           highlight={stats.uncontactedHighScore > 0}
         />
         <SummaryCard
           label="Need enrichment"
           value={stats.failedEnrichments}
           icon={<AlertCircle size={14} />}
-          href="/companies"
+          href="/leads/companies"
         />
       </div>
 

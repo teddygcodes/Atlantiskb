@@ -55,7 +55,7 @@ export function TopLeads() {
           <PhoneCall size={13} className="text-gray-400" />
           Top Leads to Call This Week
         </span>
-        <Link href="/companies?minScore=60&status=NEW" className="text-xs text-blue-600 hover:underline">
+        <Link href="/leads/companies?minScore=60&status=NEW" className="text-xs text-blue-600 hover:underline">
           View all
         </Link>
       </div>
