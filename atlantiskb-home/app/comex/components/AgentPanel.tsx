@@ -84,6 +84,7 @@ export default function AgentPanel({ lastSyncDate }: AgentPanelProps) {
   const [supportRequestId, setSupportRequestId] = useState<string | null>(null)
   const messagesContainerRef = useRef<HTMLDivElement | null>(null)
   const nearBottomRef = useRef(true)
+  const flushTimeoutRef = useRef<number | null>(null)
 
   function updateNearBottom() {
     const container = messagesContainerRef.current
@@ -107,6 +108,15 @@ export default function AgentPanel({ lastSyncDate }: AgentPanelProps) {
     }, 320)
     return () => window.clearInterval(timer)
   }, [isStreaming])
+
+  useEffect(() => {
+    return () => {
+      if (flushTimeoutRef.current !== null) {
+        window.clearTimeout(flushTimeoutRef.current)
+        flushTimeoutRef.current = null
+      }
+    }
+  }, [])
 
   const thinkingLabel = useMemo(() => {
     return `Thinking${'.'.repeat(thinkingTick)}`
@@ -203,6 +213,40 @@ export default function AgentPanel({ lastSyncDate }: AgentPanelProps) {
       let buffer = ''
       let assistantRaw = ''
 
+      const flushAssistantUpdate = () => {
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === assistantId
+              ? {
+                  ...msg,
+                  content: assistantRaw,
+                }
+              : msg,
+          ),
+        )
+
+        if (nearBottomRef.current) {
+          scrollMessagesToBottom()
+        }
+      }
+
+      const scheduleAssistantFlush = () => {
+        if (flushTimeoutRef.current !== null) return
+
+        flushTimeoutRef.current = window.setTimeout(() => {
+          flushTimeoutRef.current = null
+          flushAssistantUpdate()
+        }, 60)
+      }
+
+      const flushAssistantNow = () => {
+        if (flushTimeoutRef.current !== null) {
+          window.clearTimeout(flushTimeoutRef.current)
+          flushTimeoutRef.current = null
+        }
+        flushAssistantUpdate()
+      }
+
       while (true) {
         const { done, value } = await reader.read()
         if (done) break
@@ -225,22 +269,8 @@ export default function AgentPanel({ lastSyncDate }: AgentPanelProps) {
             const nextText = parseEventText(dataLine)
             if (!nextText) continue
 
-            const shouldAutoScroll = nearBottomRef.current
             assistantRaw += nextText
-            setMessages((prev) =>
-              prev.map((msg) =>
-                msg.id === assistantId
-                  ? {
-                      ...msg,
-                      content: assistantRaw,
-                }
-                  : msg,
-              ),
-            )
-
-            if (shouldAutoScroll) {
-              requestAnimationFrame(scrollMessagesToBottom)
-            }
+            scheduleAssistantFlush()
           }
 
           boundaryIndex = buffer.indexOf('\n\n')
@@ -260,6 +290,8 @@ export default function AgentPanel({ lastSyncDate }: AgentPanelProps) {
           assistantRaw += nextText
         }
       }
+
+      flushAssistantNow()
 
       const parsed = extractSources(assistantRaw)
       setMessages((prev) =>
@@ -287,6 +319,10 @@ export default function AgentPanel({ lastSyncDate }: AgentPanelProps) {
       )
       setError(streamError instanceof Error ? streamError.message : 'Unknown error')
     } finally {
+      if (flushTimeoutRef.current !== null) {
+        window.clearTimeout(flushTimeoutRef.current)
+        flushTimeoutRef.current = null
+      }
       setIsStreaming(false)
     }
   }
