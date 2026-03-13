@@ -18,13 +18,61 @@ export interface ComexSchemaReadiness {
   optional: {
     embeddingColumn: boolean
     vectorExtension: boolean
+    embeddingDimensionDetected: boolean
     vectorSearchReady: boolean
+  }
+  diagnostics: {
+    embeddingTypeLooksLikeVector: boolean
+    embeddingDimensionSource: "atttypmod" | "type_parse" | "none"
+    vectorSearchReadyReason:
+      | "ready"
+      | "missing_embedding_column"
+      | "missing_vector_extension"
+      | "embedding_dimension_unknown"
+      | "embedding_dimension_mismatch"
   }
 }
 
 const REMEDIATION = 'run prisma migrate deploy'
 const EXPECTED_EMBEDDING_DIMENSION = 512
 let lastLoggedFingerprint = ''
+
+function detectEmbeddingDimension(checks: {
+  embeddingDimension: number | null
+  embeddingColumnType: string | null
+}): {
+  embeddingDimension: number | null
+  source: "atttypmod" | "type_parse" | "none"
+  typeLooksLikeVector: boolean
+} {
+  const dimensionFromTypmod = toNullableNumber(checks.embeddingDimension)
+
+  if (dimensionFromTypmod) {
+    return {
+      embeddingDimension: dimensionFromTypmod,
+      source: "atttypmod",
+      typeLooksLikeVector: true,
+    }
+  }
+
+  const embeddingType = typeof checks.embeddingColumnType === "string" ? checks.embeddingColumnType : ""
+  const vectorMatch = embeddingType.match(/^vector\((\d+)\)$/i)
+
+  if (vectorMatch) {
+    const parsed = Number(vectorMatch[1])
+    return {
+      embeddingDimension: Number.isFinite(parsed) && parsed > 0 ? parsed : null,
+      source: "type_parse",
+      typeLooksLikeVector: true,
+    }
+  }
+
+  return {
+    embeddingDimension: null,
+    source: "none",
+    typeLooksLikeVector: /vector/i.test(embeddingType),
+  }
+}
 
 function buildReadinessFromChecks(checks: {
   hasNewsArticleTable: boolean
@@ -38,7 +86,11 @@ function buildReadinessFromChecks(checks: {
   embeddingDimension: number | null
   embeddingColumnType: string | null
 }): ComexSchemaReadiness {
-  const embeddingDimension = toNullableNumber(checks.embeddingDimension)
+  const embeddingDetails = detectEmbeddingDimension({
+    embeddingDimension: checks.embeddingDimension,
+    embeddingColumnType: checks.embeddingColumnType,
+  })
+  const embeddingDimension = embeddingDetails.embeddingDimension
   const embeddingDimensionMatches = embeddingDimension === EXPECTED_EMBEDDING_DIMENSION
 
   const required = {
@@ -51,11 +103,27 @@ function buildReadinessFromChecks(checks: {
     commodityPriceTable: toBool(checks.hasCommodityPriceTable),
   }
 
+  const hasEmbeddingColumn = toBool(checks.hasEmbeddingColumn)
+  const hasVectorExtension = toBool(checks.hasVectorExtension)
+  const embeddingDimensionDetected = embeddingDimension !== null
+
+  let vectorSearchReadyReason: ComexSchemaReadiness["diagnostics"]["vectorSearchReadyReason"] = "ready"
+
+  if (!hasEmbeddingColumn) {
+    vectorSearchReadyReason = "missing_embedding_column"
+  } else if (!hasVectorExtension) {
+    vectorSearchReadyReason = "missing_vector_extension"
+  } else if (!embeddingDimensionDetected) {
+    vectorSearchReadyReason = "embedding_dimension_unknown"
+  } else if (!embeddingDimensionMatches) {
+    vectorSearchReadyReason = "embedding_dimension_mismatch"
+  }
+
   const optional = {
-    embeddingColumn: toBool(checks.hasEmbeddingColumn),
-    vectorExtension: toBool(checks.hasVectorExtension),
-    vectorSearchReady:
-      toBool(checks.hasEmbeddingColumn) && toBool(checks.hasVectorExtension) && embeddingDimensionMatches,
+    embeddingColumn: hasEmbeddingColumn,
+    vectorExtension: hasVectorExtension,
+    embeddingDimensionDetected,
+    vectorSearchReady: vectorSearchReadyReason === "ready",
   }
 
   const ready = required.newsArticleTable && required.priceEventTable && required.commodityPriceTable
@@ -71,6 +139,11 @@ function buildReadinessFromChecks(checks: {
     embeddingColumnType: checks.embeddingColumnType,
     required,
     optional,
+    diagnostics: {
+      embeddingTypeLooksLikeVector: embeddingDetails.typeLooksLikeVector,
+      embeddingDimensionSource: embeddingDetails.source,
+      vectorSearchReadyReason,
+    },
   }
 }
 
