@@ -18,7 +18,7 @@ export const tools: Tool[] = [
     description:
       'Permit-driven contractor lead engine for Metro Atlanta and North Georgia. Scores, enriches, and surfaces electrical contractors ready to buy.',
     tag: 'Lead Generation',
-    url: 'https://leads.atlantiskb.com',
+    url: '/leads',
     status: 'live',
   },
 ]
