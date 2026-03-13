@@ -336,12 +336,20 @@ export async function buildRAGContext(question: string, metals: MetalKey[]): Pro
   if (canRunVectorQuery) {
     try {
       const questionEmbedding = await embedText(question)
+      const questionEmbeddingLength = questionEmbedding.length
       const vectorLiteral = toVectorLiteral(questionEmbedding)
       const metalFilter = Prisma.join([...activeMetals, 'both'])
+
+      if (questionEmbeddingLength !== 512) {
+        console.warn('[comex-rag] unexpected embedding length for semantic query', {
+          questionEmbeddingLength,
+        })
+      }
 
       console.info('[comex-rag] executing vector similarity query', {
         activeMetals,
         questionLength: question.length,
+        questionEmbeddingLength,
       })
 
       similarRows = await db.$queryRaw<SimilarityRow[]>(Prisma.sql`
