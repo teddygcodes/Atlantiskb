@@ -45,25 +45,28 @@ function detectEmbeddingDimension(checks: {
   source: "atttypmod" | "type_parse" | "none"
   typeLooksLikeVector: boolean
 } {
-  const dimensionFromTypmod = toNullableNumber(checks.embeddingDimension)
-
-  if (dimensionFromTypmod) {
-    return {
-      embeddingDimension: dimensionFromTypmod,
-      source: "atttypmod",
-      typeLooksLikeVector: true,
-    }
-  }
-
   const embeddingType = typeof checks.embeddingColumnType === "string" ? checks.embeddingColumnType : ""
-  const vectorMatch = embeddingType.match(/^vector\((\d+)\)$/i)
 
+  // Prefer format_type string — canonical and handles schema-prefixed types
+  // (e.g. Supabase may return "extensions.vector(512)" instead of "vector(512)").
+  // Use unanchored match so any prefix is tolerated.
+  const vectorMatch = embeddingType.match(/vector\((\d+)\)/i)
   if (vectorMatch) {
     const parsed = Number(vectorMatch[1])
     return {
       embeddingDimension: Number.isFinite(parsed) && parsed > 0 ? parsed : null,
       source: "type_parse",
       typeLooksLikeVector: true,
+    }
+  }
+
+  // Fallback: atttypmod (pgvector stores dim+4; SQL computes NULLIF(atttypmod,-1)-4)
+  const dimensionFromTypmod = toNullableNumber(checks.embeddingDimension)
+  if (dimensionFromTypmod) {
+    return {
+      embeddingDimension: dimensionFromTypmod,
+      source: "atttypmod",
+      typeLooksLikeVector: /vector/i.test(embeddingType),
     }
   }
 
