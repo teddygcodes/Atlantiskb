@@ -20,6 +20,14 @@ interface PriceEventRow {
   magnitude: 'medium' | 'large'
 }
 
+interface VectorRetrievalDiagnostics {
+  hasNewsArticleTable: boolean
+  hasEmbeddingColumn: boolean
+  hasVectorExtension: boolean
+  totalArticles: number
+  articlesWithEmbeddings: number
+}
+
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error) return error.message
   return String(error)
@@ -252,18 +260,89 @@ async function fetchFallbackRows(question: string, activeMetals: MetalKey[]): Pr
   }))
 }
 
+async function inspectVectorRetrievalPath(): Promise<VectorRetrievalDiagnostics> {
+  const [row] = await db.$queryRaw<
+    Array<{
+      hasNewsArticleTable: boolean
+      hasEmbeddingColumn: boolean
+      hasVectorExtension: boolean
+      totalArticles: number
+      articlesWithEmbeddings: number
+    }>
+  >(Prisma.sql`
+    SELECT
+      EXISTS (
+        SELECT 1
+        FROM information_schema.tables
+        WHERE table_schema = 'public'
+          AND table_name = 'NewsArticle'
+      ) AS "hasNewsArticleTable",
+      EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'NewsArticle'
+          AND column_name = 'embedding'
+      ) AS "hasEmbeddingColumn",
+      EXISTS (
+        SELECT 1
+        FROM pg_extension
+        WHERE extname = 'vector'
+      ) AS "hasVectorExtension",
+      COALESCE((SELECT COUNT(*)::int FROM "NewsArticle"), 0) AS "totalArticles",
+      COALESCE((SELECT COUNT(*)::int FROM "NewsArticle" WHERE "embedding" IS NOT NULL), 0) AS "articlesWithEmbeddings"
+  `)
+
+  return {
+    hasNewsArticleTable: row?.hasNewsArticleTable === true,
+    hasEmbeddingColumn: row?.hasEmbeddingColumn === true,
+    hasVectorExtension: row?.hasVectorExtension === true,
+    totalArticles: Number(row?.totalArticles ?? 0),
+    articlesWithEmbeddings: Number(row?.articlesWithEmbeddings ?? 0),
+  }
+}
+
 export async function buildRAGContext(question: string, metals: MetalKey[]): Promise<RAGContext> {
   const selectedMetals = metals.filter((metal): metal is MetalKey => METAL_KEYS.includes(metal))
   const activeMetals = selectedMetals.length > 0 ? selectedMetals : METAL_KEYS
 
   const hasVoyageApiKey = Boolean(process.env.VOYAGE_API_KEY)
   let similarRows: SimilarityRow[] = []
+  let vectorDiagnostics: VectorRetrievalDiagnostics = {
+    hasNewsArticleTable: false,
+    hasEmbeddingColumn: false,
+    hasVectorExtension: false,
+    totalArticles: 0,
+    articlesWithEmbeddings: 0,
+  }
 
-  if (hasVoyageApiKey) {
+  try {
+    vectorDiagnostics = await inspectVectorRetrievalPath()
+    console.info('[comex-rag] vector retrieval diagnostics', vectorDiagnostics)
+  } catch (error) {
+    console.error('[comex-rag] vector retrieval diagnostics failed', {
+      error,
+      activeMetals,
+    })
+  }
+
+  const canRunVectorQuery =
+    hasVoyageApiKey &&
+    vectorDiagnostics.hasNewsArticleTable &&
+    vectorDiagnostics.hasEmbeddingColumn &&
+    vectorDiagnostics.hasVectorExtension &&
+    vectorDiagnostics.articlesWithEmbeddings > 0
+
+  if (canRunVectorQuery) {
     try {
       const questionEmbedding = await embedText(question)
       const vectorLiteral = toVectorLiteral(questionEmbedding)
       const metalFilter = Prisma.join([...activeMetals, 'both'])
+
+      console.info('[comex-rag] executing vector similarity query', {
+        activeMetals,
+        questionLength: question.length,
+      })
 
       similarRows = await db.$queryRaw<SimilarityRow[]>(Prisma.sql`
         SELECT
@@ -280,6 +359,10 @@ export async function buildRAGContext(question: string, metals: MetalKey[]): Pro
         ORDER BY "similarity" DESC
         LIMIT 8
       `)
+
+      console.info('[comex-rag] vector similarity query completed', {
+        similarityResultCount: similarRows.length,
+      })
     } catch (error) {
       console.error('[comex-rag] semantic retrieval unavailable; falling back to recency path', {
         error,
@@ -288,8 +371,9 @@ export async function buildRAGContext(question: string, metals: MetalKey[]): Pro
       })
     }
   } else {
-    console.warn('[comex-rag] VOYAGE_API_KEY missing; falling back to recency path', {
-      activeMetals,
+    console.warn('[comex-rag] vector retrieval prerequisites not met; skipping semantic query', {
+      hasVoyageApiKey,
+      vectorDiagnostics,
     })
   }
 
@@ -301,7 +385,7 @@ export async function buildRAGContext(question: string, metals: MetalKey[]): Pro
         error,
         activeMetals,
       })
-      throw new Error(`Fallback retrieval failed: ${error instanceof Error ? error.message : String(error)}`)
+      similarRows = []
     }
   }
 
@@ -335,7 +419,7 @@ export async function buildRAGContext(question: string, metals: MetalKey[]): Pro
           error,
           metal,
         })
-        throw new Error(`Price history retrieval failed: metal=${metal}; ${getErrorMessage(error)}`)
+        rows = []
       }
     }
 
@@ -369,7 +453,7 @@ export async function buildRAGContext(question: string, metals: MetalKey[]): Pro
           error,
           metal,
         })
-        throw new Error(`Large event retrieval failed: metal=${metal}; ${getErrorMessage(error)}`)
+        recentLargeEvents = []
       }
     }
 
