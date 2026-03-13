@@ -17,7 +17,11 @@ export default async function Home() {
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--bg)' }}>
-      <Topbar initials={initials} />
+      <Topbar
+        initials={initials}
+        firstName={user?.firstName ?? ''}
+        email={user?.emailAddresses[0]?.emailAddress ?? ''}
+      />
 
       <main style={{ maxWidth: '1280px', margin: '0 auto', padding: '40px 24px 80px' }}>
         {/* Page header */}
