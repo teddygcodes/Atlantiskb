@@ -380,7 +380,7 @@ export function PermitsBrowser({ counties, initialStats }: PermitsBrowserProps) 
                           <td className="px-4 py-2.5">
                             {permit.companyId ? (
                               <Link
-                                href={`/companies/${permit.companyId}`}
+                                href={`/leads/companies/${permit.companyId}`}
                                 onClick={e => e.stopPropagation()}
                                 className="font-medium text-blue-600 hover:text-blue-800 hover:underline"
                               >

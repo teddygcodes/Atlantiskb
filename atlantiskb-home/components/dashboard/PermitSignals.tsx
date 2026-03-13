@@ -315,7 +315,7 @@ export function PermitSignals() {
                   <StatusPill status={permit.status} />
                   {permit.company ? (
                     <Link
-                      href={`/companies/${permit.company.id}`}
+                      href={`/leads/companies/${permit.company.id}`}
                       className="text-[11px] text-blue-600 hover:underline"
                     >
                       {permit.company.name}

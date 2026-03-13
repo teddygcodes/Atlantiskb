@@ -123,7 +123,7 @@ export function ProspectingView() {
       if (names) params.set('names', names)
       if (placeIds) params.set('placeIds', placeIds)
 
-      const res = await fetch(`/api/places/check?${params}`)
+      const res = await fetch(`/leads/api/places/check?${params}`)
       if (!res.ok) return
 
       const data = (await res.json()) as {
@@ -168,7 +168,7 @@ export function ProspectingView() {
     setNextPageToken(undefined)
 
     try {
-      const res = await fetch(`/api/places/search?query=${encodeURIComponent(q.trim())}`)
+      const res = await fetch(`/leads/api/places/search?query=${encodeURIComponent(q.trim())}`)
       if (!res.ok) {
         const body = await res.json()
         if (body.error === 'GOOGLE_PLACES_NOT_CONFIGURED') {
@@ -659,7 +659,7 @@ function StatusCell({
   // In DB + active permit → green badge linking to company detail
   if (status.inDB && status.hasActivePermit) {
     return (
-      <Link href={`/companies/${status.companyId}`}>
+      <Link href={`/leads/companies/${status.companyId}`}>
         <span className="inline-flex items-center rounded-full bg-green-50 px-2 py-0.5 text-[10px] font-medium text-green-700 hover:bg-green-100 cursor-pointer">
           In DB · Active Permit
         </span>

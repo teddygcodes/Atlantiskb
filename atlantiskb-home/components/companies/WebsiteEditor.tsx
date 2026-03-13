@@ -52,7 +52,7 @@ export function WebsiteEditor({ companyId, initialWebsite, initialDomain }: Webs
     setSaving(true)
     setError(null)
     try {
-      const res = await fetch(`/api/companies/${companyId}`, {
+      const res = await fetch(`/leads/api/companies/${companyId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ website: url || null }),
