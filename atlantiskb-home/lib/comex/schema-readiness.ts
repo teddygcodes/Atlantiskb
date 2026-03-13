@@ -29,6 +29,9 @@ function buildReadinessFromChecks(checks: {
   hasNewsArticleTable: boolean
   hasPriceEventTable: boolean
   hasCommodityPriceTable: boolean
+  hasHeadlineColumn: boolean
+  hasSourceColumn: boolean
+  hasCreatedAtColumn: boolean
   hasEmbeddingColumn: boolean
   hasVectorExtension: boolean
   embeddingDimension: number | null
@@ -37,7 +40,11 @@ function buildReadinessFromChecks(checks: {
   const embeddingDimensionMatches = embeddingDimension === EXPECTED_EMBEDDING_DIMENSION
 
   const required = {
-    newsArticleTable: toBool(checks.hasNewsArticleTable),
+    newsArticleTable:
+      toBool(checks.hasNewsArticleTable)
+      && toBool(checks.hasHeadlineColumn)
+      && toBool(checks.hasSourceColumn)
+      && toBool(checks.hasCreatedAtColumn),
     priceEventTable: toBool(checks.hasPriceEventTable),
     commodityPriceTable: toBool(checks.hasCommodityPriceTable),
   }
@@ -102,6 +109,9 @@ export async function getComexSchemaReadiness(): Promise<ComexSchemaReadiness> {
         hasNewsArticleTable: boolean
         hasPriceEventTable: boolean
         hasCommodityPriceTable: boolean
+        hasHeadlineColumn: boolean
+        hasSourceColumn: boolean
+        hasCreatedAtColumn: boolean
         hasEmbeddingColumn: boolean
         hasVectorExtension: boolean
         embeddingDimension: number | null
@@ -126,6 +136,27 @@ export async function getComexSchemaReadiness(): Promise<ComexSchemaReadiness> {
         WHERE table_schema = 'public'
           AND table_name = 'CommodityPrice'
       ) AS "hasCommodityPriceTable",
+      EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'NewsArticle'
+          AND column_name = 'headline'
+      ) AS "hasHeadlineColumn",
+      EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'NewsArticle'
+          AND column_name = 'source'
+      ) AS "hasSourceColumn",
+      EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'NewsArticle'
+          AND column_name = 'createdAt'
+      ) AS "hasCreatedAtColumn",
       EXISTS (
         SELECT 1
         FROM information_schema.columns
@@ -159,6 +190,9 @@ export async function getComexSchemaReadiness(): Promise<ComexSchemaReadiness> {
       hasNewsArticleTable: toBool(row?.hasNewsArticleTable),
       hasPriceEventTable: toBool(row?.hasPriceEventTable),
       hasCommodityPriceTable: toBool(row?.hasCommodityPriceTable),
+      hasHeadlineColumn: toBool(row?.hasHeadlineColumn),
+      hasSourceColumn: toBool(row?.hasSourceColumn),
+      hasCreatedAtColumn: toBool(row?.hasCreatedAtColumn),
       hasEmbeddingColumn: toBool(row?.hasEmbeddingColumn),
       hasVectorExtension: toBool(row?.hasVectorExtension),
       embeddingDimension: toNullableNumber(row?.embeddingDimension),
@@ -172,6 +206,9 @@ export async function getComexSchemaReadiness(): Promise<ComexSchemaReadiness> {
       hasNewsArticleTable: false,
       hasPriceEventTable: false,
       hasCommodityPriceTable: false,
+      hasHeadlineColumn: false,
+      hasSourceColumn: false,
+      hasCreatedAtColumn: false,
       hasEmbeddingColumn: false,
       hasVectorExtension: false,
       embeddingDimension: null,

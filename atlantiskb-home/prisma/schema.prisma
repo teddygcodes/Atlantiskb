@@ -272,10 +272,13 @@ model CommodityPrice {
 
 model NewsArticle {
   id          String    @id @default(cuid())
+  headline    String
   snippet     String    @db.Text
   url         String    @unique
+  source      String
   metal       NewsMetal
   publishedAt DateTime
+  createdAt   DateTime  @default(now())
 
   @@index([publishedAt])
   @@index([metal])
