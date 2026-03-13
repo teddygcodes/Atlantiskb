@@ -1,8 +1,16 @@
 import { NewsMetal, PriceDirection, PriceMagnitude } from '@prisma/client'
 import { db } from '@/lib/db'
 
+function toNewsMetal(metal: string): NewsMetal {
+  if ((Object.values(NewsMetal) as string[]).includes(metal)) {
+    return metal as NewsMetal
+  }
+
+  throw new Error(`Invalid metal for PriceEvent: ${metal}`)
+}
+
 export async function syncPriceEvents(metal: string): Promise<void> {
-  const eventMetal = metal as NewsMetal
+  const eventMetal = toNewsMetal(metal)
   const prices = await db.commodityPrice.findMany({
     where: { metal },
     orderBy: { settlementDate: 'asc' },
@@ -12,7 +20,7 @@ export async function syncPriceEvents(metal: string): Promise<void> {
     const prev = prices[i - 1]
     const curr = prices[i]
 
-    if (!prev || prev.close === 0) {
+    if (prev.close === 0) {
       continue
     }
 
