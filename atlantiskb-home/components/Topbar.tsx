@@ -43,16 +43,17 @@ export default function Topbar({ initials, firstName, email }: TopbarProps) {
     }}>
       {/* Left: logo mark + wordmark + divider + page label */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 0 }}>
-        {/* 2×2 grid logo mark */}
+        {/* Trident logo mark */}
         <svg
-          width="16" height="16" viewBox="0 0 16 16" fill="none"
+          width="16" height="16" viewBox="0 0 24 24" fill="white"
           xmlns="http://www.w3.org/2000/svg"
-          style={{ flexShrink: 0, opacity: 0.95 }}
+          style={{ flexShrink: 0 }}
         >
-          <rect x="0" y="0" width="7" height="7" rx="1" fill="white" />
-          <rect x="9" y="0" width="7" height="7" rx="1" fill="white" />
-          <rect x="0" y="9" width="7" height="7" rx="1" fill="white" />
-          <rect x="9" y="9" width="7" height="7" rx="1" fill="white" />
+          <path d="M4.5 13 C2.5 11.5 2 8 3.5 5.5 C4.5 3 7 3.5 8.5 7.5 L8.5 13 Z" />
+          <path d="M19.5 13 C21.5 11.5 22 8 20.5 5.5 C19.5 3 17 3.5 15.5 7.5 L15.5 13 Z" />
+          <polygon points="12,2 10.5,12.5 13.5,12.5" />
+          <rect x="4.5" y="12.5" width="15" height="1.5" />
+          <rect x="10.5" y="14" width="3" height="9" />
         </svg>
 
         <span style={{

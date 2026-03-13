@@ -57,12 +57,13 @@ const ghostBtnStyle: React.CSSProperties = {
 function Logo() {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '32px' }}>
-      <svg width="28" height="28" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <rect width="28" height="28" fill="#d13438" />
-        <rect x="4" y="4" width="9" height="9" fill="white" />
-        <rect x="15" y="4" width="9" height="9" fill="white" />
-        <rect x="4" y="15" width="9" height="9" fill="white" />
-        <rect x="15" y="15" width="9" height="9" fill="white" />
+      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect width="24" height="24" fill="#d13438" rx="3" />
+        <path d="M4.5 13 C2.5 11.5 2 8 3.5 5.5 C4.5 3 7 3.5 8.5 7.5 L8.5 13 Z" fill="white" />
+        <path d="M19.5 13 C21.5 11.5 22 8 20.5 5.5 C19.5 3 17 3.5 15.5 7.5 L15.5 13 Z" fill="white" />
+        <polygon points="12,2 10.5,12.5 13.5,12.5" fill="white" />
+        <rect x="4.5" y="12.5" width="15" height="1.5" fill="white" />
+        <rect x="10.5" y="14" width="3" height="9" fill="white" />
       </svg>
       <span style={{ fontWeight: 700, fontSize: '16px', color: 'var(--text-primary)', letterSpacing: '-0.01em' }}>
         Atlantis KB
