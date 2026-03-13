@@ -209,7 +209,10 @@ The COMEX semantic retrieval path expects a `vector` extension and `NewsArticle.
 
 ## Deployment notes
 - Configured for Vercel deployment.
-- Build script runs `prisma generate && next build`.
+- Build script runs `prisma generate && npx prisma migrate deploy && next build`.
+- `vercel-build` script runs `npx prisma migrate deploy && npm run build` for Vercel deployments so migrations run against the same `DATABASE_URL` used at runtime.
+- Start script runs `npx prisma migrate deploy && next start` before serving traffic.
+- **Required deploy step:** ensure migrations are never skipped (`npx prisma migrate deploy`) before production traffic is served.
 - `vercel.json` configures cron schedules for COMEX sync endpoints.
 - Ensure all runtime env vars are set in deployment target, especially database, Clerk, and API credentials.
 
