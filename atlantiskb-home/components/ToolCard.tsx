@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import type { Tool } from '@/lib/tools.config'
 
 interface ToolCardProps {
@@ -9,6 +10,16 @@ interface ToolCardProps {
 
 export default function ToolCard({ tool }: ToolCardProps) {
   const [hovered, setHovered] = useState(false)
+  const router = useRouter()
+
+  function handleClick() {
+    if (!tool.url) return
+    if (tool.url.startsWith('/')) {
+      router.push(tool.url)
+    } else {
+      window.open(tool.url, '_blank', 'noopener,noreferrer')
+    }
+  }
 
   if (tool.status === 'coming-soon') {
     return (
@@ -30,7 +41,7 @@ export default function ToolCard({ tool }: ToolCardProps) {
 
   return (
     <div
-      onClick={() => tool.url && window.open(tool.url, '_blank', 'noopener,noreferrer')}
+      onClick={handleClick}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{
@@ -122,7 +133,7 @@ export default function ToolCard({ tool }: ToolCardProps) {
             transition: 'opacity 0.15s',
           }}
         >
-          Open ↗
+          {tool.url?.startsWith('/') ? 'Open →' : 'Open ↗'}
         </span>
       </div>
     </div>
