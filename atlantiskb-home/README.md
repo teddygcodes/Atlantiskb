@@ -204,6 +204,9 @@ For development migrations:
 npx prisma migrate dev
 ```
 
+### COMEX agent schema readiness
+The COMEX agent runs in normal mode only when all required COMEX tables exist: `CommodityPrice`, `NewsArticle`, and `PriceEvent`. If any required table is missing, schema readiness reports degraded mode and the agent falls back to a degraded response path until migrations are applied (`npx prisma migrate deploy`).
+
 ### pgvector note for COMEX RAG
 The COMEX semantic retrieval path expects a `vector` extension and `NewsArticle.embedding` vector column. Confirm your database has the extension/column/index expected by migrations and raw SQL inserts before enabling news embedding sync in non-dev environments.
 
