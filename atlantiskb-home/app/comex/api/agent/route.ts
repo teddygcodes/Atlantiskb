@@ -2,6 +2,8 @@ import { auth } from '@clerk/nextjs/server'
 import { METAL_KEYS, type MetalKey } from '@/lib/comex/constants'
 import { buildRAGContext } from '@/lib/comex/rag'
 
+type SetupStage = 'auth' | 'validation' | 'config' | 'embedding' | 'vector_retrieval' | 'anthropic'
+
 interface HistoryTurn {
   role: 'user' | 'assistant'
   content: string
@@ -57,27 +59,78 @@ Context JSON:
 ${contextJson}`
 }
 
+function jsonError(status: number, stage: SetupStage, message: string, detail?: string): Response {
+  return new Response(JSON.stringify({ error: message, stage, detail }), {
+    status,
+    headers: { 'content-type': 'application/json' },
+  })
+}
+
+function logStageError(stage: SetupStage, error: unknown, extras?: Record<string, unknown>): void {
+  console.error('[comex-agent] setup failure', {
+    stage,
+    error,
+    ...extras,
+  })
+}
+
+function getRuntimeConfig(): { anthropicApiKey: string; hasDatabaseUrl: boolean; hasDirectUrl: boolean } {
+  const anthropicApiKey = process.env.ANTHROPIC_API_KEY ?? ''
+  const hasDatabaseUrl = Boolean(process.env.DATABASE_URL)
+  const hasDirectUrl = Boolean(process.env.DIRECT_URL)
+
+  return { anthropicApiKey, hasDatabaseUrl, hasDirectUrl }
+}
+
 export async function POST(req: Request): Promise<Response> {
-  const { userId } = await auth()
-  if (!userId) {
-    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-      status: 401,
-      headers: { 'content-type': 'application/json' },
-    })
+  let userId: string | null = null
+  try {
+    const authResult = await auth()
+    userId = authResult.userId
+  } catch (error) {
+    logStageError('auth', error)
+    return jsonError(500, 'auth', 'Auth failed during request setup')
   }
 
-  const body = (await req.json()) as RequestBody
+  if (!userId) {
+    return jsonError(401, 'auth', 'Unauthorized')
+  }
+
+  let body: RequestBody
+  try {
+    body = (await req.json()) as RequestBody
+  } catch (error) {
+    logStageError('validation', error)
+    return jsonError(400, 'validation', 'Invalid JSON body')
+  }
+
   const question = normalizeQuestion(body.question)
   if (!question) {
-    return new Response(JSON.stringify({ error: 'Question is required' }), {
-      status: 400,
-      headers: { 'content-type': 'application/json' },
-    })
+    return jsonError(400, 'validation', 'Question is required')
+  }
+
+  const { anthropicApiKey, hasDatabaseUrl, hasDirectUrl } = getRuntimeConfig()
+  if (!anthropicApiKey) {
+    logStageError('config', new Error('ANTHROPIC_API_KEY is missing'))
+    return jsonError(500, 'config', 'ANTHROPIC_API_KEY is not configured')
+  }
+
+  if (!hasDatabaseUrl && !hasDirectUrl) {
+    logStageError('config', new Error('DATABASE_URL and DIRECT_URL are both missing'))
   }
 
   const metals = resolveMetals(body.metal)
   const history = normalizeHistory(body.history)
-  const ragContext = await buildRAGContext(question, metals)
+  let ragContext
+  try {
+    ragContext = await buildRAGContext(question, metals)
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : undefined
+    const stage = detail?.startsWith('Embedding generation failed:') ? 'embedding' : 'vector_retrieval'
+    logStageError(stage, error, { metals, questionLength: question.length })
+    return jsonError(500, stage, 'Failed to build retrieval context', detail)
+  }
+
   const system = buildSystemPrompt(JSON.stringify(ragContext, null, 2))
 
   const messages = [
@@ -85,31 +138,36 @@ export async function POST(req: Request): Promise<Response> {
     { role: 'user' as const, content: question },
   ]
 
-  const anthropicResponse = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'x-api-key': process.env.ANTHROPIC_API_KEY ?? '',
-      'anthropic-version': '2023-06-01',
-      'content-type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 2048,
-      stream: true,
-      system,
-      messages,
-    }),
-  })
+  let anthropicResponse: globalThis.Response
+  try {
+    anthropicResponse = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'x-api-key': anthropicApiKey,
+        'anthropic-version': '2023-06-01',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 2048,
+        stream: true,
+        system,
+        messages,
+      }),
+    })
+  } catch (error) {
+    logStageError('anthropic', error, { userId })
+    return jsonError(502, 'anthropic', 'Anthropic request threw before receiving a response', error instanceof Error ? error.message : undefined)
+  }
 
   if (!anthropicResponse.ok || !anthropicResponse.body) {
     const errorText = await anthropicResponse.text()
-    return new Response(
-      JSON.stringify({ error: 'Anthropic request failed', status: anthropicResponse.status, detail: errorText }),
-      {
-        status: 502,
-        headers: { 'content-type': 'application/json' },
-      },
-    )
+    logStageError('anthropic', new Error('Anthropic request failed'), {
+      status: anthropicResponse.status,
+      detail: errorText,
+    })
+
+    return jsonError(502, 'anthropic', 'Anthropic request failed', `status=${anthropicResponse.status} ${errorText}`)
   }
 
   return new Response(anthropicResponse.body, {
