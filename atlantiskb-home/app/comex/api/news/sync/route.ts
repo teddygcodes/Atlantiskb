@@ -5,6 +5,7 @@ import { db as prisma } from '@/lib/db'
 import { embedBatch } from '@/lib/comex/embeddings'
 import { NEWS_SOURCES, inferMetal, isRelevant } from '@/lib/comex/news-sources'
 import { syncPriceEvents } from '@/lib/comex/price-events'
+import { getComexSchemaReadiness } from '@/lib/comex/schema-readiness'
 
 type SourceResult = {
   source: string
@@ -36,6 +37,16 @@ function createCuid(seed: string): string {
 export async function GET() {
   const parser = new Parser({ timeout: 10_000 })
   const results: SourceResult[] = []
+  const schemaReadiness = await getComexSchemaReadiness()
+
+  if (schemaReadiness.degraded) {
+    return NextResponse.json({
+      ok: true,
+      degraded: true,
+      readiness: schemaReadiness,
+      results,
+    })
+  }
 
   for (const source of NEWS_SOURCES) {
     try {
@@ -89,22 +100,38 @@ export async function GET() {
       }
 
       const snippets = toInsert.map((item) => toSnippet(item.title, item.content))
-      const embeddings = await embedBatch(snippets)
+      const supportsVectorSearch = schemaReadiness.optional.vectorSearchReady
+      const embeddings = supportsVectorSearch ? await embedBatch(snippets) : []
 
       await prisma.$transaction(
         toInsert.map((item, index) => {
           const snippet = snippets[index]
-          const embeddingLiteral = `[${embeddings[index].join(',')}]`
+
+          if (supportsVectorSearch) {
+            const embeddingLiteral = `[${embeddings[index].join(',')}]`
+
+            return prisma.$executeRaw`
+              INSERT INTO "NewsArticle" ("id", "snippet", "url", "metal", "publishedAt", "embedding")
+              VALUES (
+                ${createCuid(item.url + item.publishedAt)},
+                ${snippet},
+                ${item.url},
+                ${inferMetal(`${item.title} ${snippet}`)},
+                ${new Date(item.publishedAt)},
+                ${embeddingLiteral}::vector
+              )
+              ON CONFLICT ("url") DO NOTHING
+            `
+          }
 
           return prisma.$executeRaw`
-            INSERT INTO "NewsArticle" ("id", "snippet", "url", "metal", "publishedAt", "embedding")
+            INSERT INTO "NewsArticle" ("id", "snippet", "url", "metal", "publishedAt")
             VALUES (
               ${createCuid(item.url + item.publishedAt)},
               ${snippet},
               ${item.url},
               ${inferMetal(`${item.title} ${snippet}`)},
-              ${new Date(item.publishedAt)},
-              ${embeddingLiteral}::vector
+              ${new Date(item.publishedAt)}
             )
             ON CONFLICT ("url") DO NOTHING
           `
@@ -114,7 +141,7 @@ export async function GET() {
       results.push({
         source: source.name,
         fetched: items.length,
-        embedded: toInsert.length,
+        embedded: supportsVectorSearch ? toInsert.length : 0,
         skipped: candidates.length - toInsert.length,
       })
     } catch (err) {
@@ -131,5 +158,10 @@ export async function GET() {
   await syncPriceEvents('copper')
   await syncPriceEvents('aluminum')
 
-  return NextResponse.json({ ok: true, results })
+  return NextResponse.json({
+    ok: true,
+    degraded: false,
+    readiness: schemaReadiness,
+    results,
+  })
 }
