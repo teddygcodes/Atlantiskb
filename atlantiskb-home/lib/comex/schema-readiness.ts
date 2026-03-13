@@ -9,6 +9,7 @@ export interface ComexSchemaReadiness {
   embeddingDimension: number | null
   expectedEmbeddingDimension: number
   embeddingDimensionMatches: boolean
+  embeddingColumnType: string | null
   required: {
     newsArticleTable: boolean
     priceEventTable: boolean
@@ -35,6 +36,7 @@ function buildReadinessFromChecks(checks: {
   hasEmbeddingColumn: boolean
   hasVectorExtension: boolean
   embeddingDimension: number | null
+  embeddingColumnType: string | null
 }): ComexSchemaReadiness {
   const embeddingDimension = toNullableNumber(checks.embeddingDimension)
   const embeddingDimensionMatches = embeddingDimension === EXPECTED_EMBEDDING_DIMENSION
@@ -66,6 +68,7 @@ function buildReadinessFromChecks(checks: {
     embeddingDimension,
     expectedEmbeddingDimension: EXPECTED_EMBEDDING_DIMENSION,
     embeddingDimensionMatches,
+    embeddingColumnType: checks.embeddingColumnType,
     required,
     optional,
   }
@@ -124,54 +127,82 @@ export async function getComexSchemaReadiness(): Promise<ComexSchemaReadiness> {
         hasEmbeddingColumn: boolean
         hasVectorExtension: boolean
         embeddingDimension: number | null
+        embeddingColumnType: string | null
       }>
     >(Prisma.sql`
+    WITH news_article AS (
+      SELECT c.oid
+      FROM pg_catalog.pg_class c
+      INNER JOIN pg_catalog.pg_namespace n
+        ON n.oid = c.relnamespace
+      WHERE n.nspname = 'public'
+        AND c.relname = 'NewsArticle'
+        AND c.relkind = 'r'
+      LIMIT 1
+    ),
+    embedding_column AS (
+      SELECT
+        a.atttypmod,
+        pg_catalog.format_type(a.atttypid, a.atttypmod) AS embedding_type
+      FROM pg_catalog.pg_attribute a
+      INNER JOIN news_article na
+        ON na.oid = a.attrelid
+      WHERE a.attname = 'embedding'
+        AND a.attnum > 0
+        AND NOT a.attisdropped
+      LIMIT 1
+    )
     SELECT
       EXISTS (
-        SELECT 1
-        FROM information_schema.tables
-        WHERE table_schema = 'public'
-          AND table_name = 'NewsArticle'
+        SELECT 1 FROM news_article
       ) AS "hasNewsArticleTable",
       EXISTS (
         SELECT 1
-        FROM information_schema.tables
-        WHERE table_schema = 'public'
-          AND table_name = 'PriceEvent'
+        FROM pg_catalog.pg_class c
+        INNER JOIN pg_catalog.pg_namespace n
+          ON n.oid = c.relnamespace
+        WHERE n.nspname = 'public'
+          AND c.relname = 'PriceEvent'
+          AND c.relkind = 'r'
       ) AS "hasPriceEventTable",
       EXISTS (
         SELECT 1
-        FROM information_schema.tables
-        WHERE table_schema = 'public'
-          AND table_name = 'CommodityPrice'
+        FROM pg_catalog.pg_class c
+        INNER JOIN pg_catalog.pg_namespace n
+          ON n.oid = c.relnamespace
+        WHERE n.nspname = 'public'
+          AND c.relname = 'CommodityPrice'
+          AND c.relkind = 'r'
       ) AS "hasCommodityPriceTable",
       EXISTS (
         SELECT 1
-        FROM information_schema.columns
-        WHERE table_schema = 'public'
-          AND table_name = 'NewsArticle'
-          AND column_name = 'headline'
+        FROM pg_catalog.pg_attribute a
+        INNER JOIN news_article na
+          ON na.oid = a.attrelid
+        WHERE a.attname = 'headline'
+          AND a.attnum > 0
+          AND NOT a.attisdropped
       ) AS "hasHeadlineColumn",
       EXISTS (
         SELECT 1
-        FROM information_schema.columns
-        WHERE table_schema = 'public'
-          AND table_name = 'NewsArticle'
-          AND column_name = 'source'
+        FROM pg_catalog.pg_attribute a
+        INNER JOIN news_article na
+          ON na.oid = a.attrelid
+        WHERE a.attname = 'source'
+          AND a.attnum > 0
+          AND NOT a.attisdropped
       ) AS "hasSourceColumn",
       EXISTS (
         SELECT 1
-        FROM information_schema.columns
-        WHERE table_schema = 'public'
-          AND table_name = 'NewsArticle'
-          AND column_name = 'createdAt'
+        FROM pg_catalog.pg_attribute a
+        INNER JOIN news_article na
+          ON na.oid = a.attrelid
+        WHERE a.attname = 'createdAt'
+          AND a.attnum > 0
+          AND NOT a.attisdropped
       ) AS "hasCreatedAtColumn",
       EXISTS (
-        SELECT 1
-        FROM information_schema.columns
-        WHERE table_schema = 'public'
-          AND table_name = 'NewsArticle'
-          AND column_name = 'embedding'
+        SELECT 1 FROM embedding_column
       ) AS "hasEmbeddingColumn",
       EXISTS (
         SELECT 1
@@ -179,18 +210,13 @@ export async function getComexSchemaReadiness(): Promise<ComexSchemaReadiness> {
         WHERE extname = 'vector'
       ) AS "hasVectorExtension",
       (
-        SELECT NULLIF(att.atttypmod, -1) - 4
-        FROM pg_catalog.pg_attribute att
-        INNER JOIN pg_catalog.pg_class cls
-          ON cls.oid = att.attrelid
-        INNER JOIN pg_catalog.pg_namespace ns
-          ON ns.oid = cls.relnamespace
-        WHERE ns.nspname = 'public'
-          AND cls.relname = 'NewsArticle'
-          AND att.attname = 'embedding'
-          AND att.attnum > 0
-          AND NOT att.attisdropped
-      ) AS "embeddingDimension"
+        SELECT NULLIF(atttypmod, -1) - 4
+        FROM embedding_column
+      ) AS "embeddingDimension",
+      (
+        SELECT embedding_type
+        FROM embedding_column
+      ) AS "embeddingColumnType"
   `)
 
     const row = checks[0]
@@ -205,6 +231,8 @@ export async function getComexSchemaReadiness(): Promise<ComexSchemaReadiness> {
       hasEmbeddingColumn: toBool(row?.hasEmbeddingColumn),
       hasVectorExtension: toBool(row?.hasVectorExtension),
       embeddingDimension: toNullableNumber(row?.embeddingDimension),
+      embeddingColumnType:
+        typeof row?.embeddingColumnType === 'string' ? row.embeddingColumnType : null,
     })
 
     logOperationalSchemaErrorOnce(readiness)
@@ -221,6 +249,7 @@ export async function getComexSchemaReadiness(): Promise<ComexSchemaReadiness> {
       hasEmbeddingColumn: false,
       hasVectorExtension: false,
       embeddingDimension: null,
+      embeddingColumnType: null,
     })
 
     console.error('[comex-schema] Failed to verify COMEX schema readiness. Agent is running in degraded mode. Remediation: run prisma migrate deploy', {
