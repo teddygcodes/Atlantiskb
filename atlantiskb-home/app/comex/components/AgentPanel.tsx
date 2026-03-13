@@ -1,6 +1,6 @@
 'use client'
 
-import { FormEvent, useEffect, useMemo, useRef, useState } from 'react'
+import { FormEvent, ReactNode, useEffect, useMemo, useRef, useState } from 'react'
 
 interface AgentPanelProps {
   lastSyncDate: string
@@ -73,6 +73,76 @@ function toLink(source: string): { href: string; label: string } {
   }
 
   return { label: source, href: '' }
+}
+
+function renderInlineBold(text: string): ReactNode[] {
+  const segments = text.split(/(\*\*[^*]+\*\*)/g)
+
+  return segments.map((segment, index) => {
+    const boldMatch = segment.match(/^\*\*([^*]+)\*\*$/)
+    if (!boldMatch) {
+      return <span key={`text-${index}`}>{segment}</span>
+    }
+
+    return (
+      <strong key={`bold-${index}`} style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
+        {boldMatch[1]}
+      </strong>
+    )
+  })
+}
+
+function isHeadingLike(line: string): boolean {
+  return /^#{1,2}\s+/.test(line) || /^\*\*[^*]{2,80}:\*\*$/.test(line) || /^[A-Z][^\n:]{1,80}:$/.test(line)
+}
+
+function renderAssistantContent(content: string): ReactNode {
+  const blocks = content
+    .split(/\n\s*\n/g)
+    .map((block) => block.trim())
+    .filter(Boolean)
+
+  if (blocks.length === 0) {
+    return null
+  }
+
+  return blocks.map((block, blockIndex) => {
+    const lines = block
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean)
+
+    const listLines = lines.filter((line) => /^[-*]\s+/.test(line))
+    if (listLines.length === lines.length) {
+      return (
+        <ul key={`list-${blockIndex}`} style={{ margin: '4px 0', paddingLeft: 18, color: 'var(--text-primary)' }}>
+          {listLines.map((line, lineIndex) => (
+            <li key={`item-${blockIndex}-${lineIndex}`} style={{ margin: '2px 0' }}>
+              {renderInlineBold(line.replace(/^[-*]\s+/, ''))}
+            </li>
+          ))}
+        </ul>
+      )
+    }
+
+    if (lines.length === 1 && isHeadingLike(lines[0])) {
+      const normalizedHeading = lines[0].replace(/^#{1,2}\s+/, '').replace(/^\*\*|\*\*$/g, '')
+      return (
+        <p
+          key={`heading-${blockIndex}`}
+          style={{ margin: '6px 0 4px', fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}
+        >
+          {renderInlineBold(normalizedHeading)}
+        </p>
+      )
+    }
+
+    return (
+      <p key={`paragraph-${blockIndex}`} style={{ margin: '4px 0', color: 'var(--text-primary)' }}>
+        {renderInlineBold(lines.join(' '))}
+      </p>
+    )
+  })
 }
 
 export default function AgentPanel({ lastSyncDate }: AgentPanelProps) {
@@ -401,12 +471,15 @@ export default function AgentPanel({ lastSyncDate }: AgentPanelProps) {
                   border: message.role === 'assistant' ? '1px solid var(--border)' : 'none',
                   borderRadius: 8,
                   padding: '8px 10px',
-                  whiteSpace: 'pre-wrap',
                   lineHeight: 1.45,
                   fontSize: 13,
                 }}
               >
-                {isAssistantThinking ? thinkingLabel : message.content}
+                {isAssistantThinking
+                  ? thinkingLabel
+                  : message.role === 'assistant'
+                    ? renderAssistantContent(message.content)
+                    : message.content}
 
                 {message.role === 'assistant' && message.sources.length > 0 && (
                   <details style={{ marginTop: 8 }}>
