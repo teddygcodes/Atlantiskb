@@ -342,7 +342,7 @@ export async function GET() {
                       ${snippet},
                       ${item.url},
                       ${source.name},
-                      ${metal},
+                      ${metal}::"NewsMetal",
                       ${new Date(item.publishedAt)},
                       ${`[${embedding.join(",")}]`}::vector
                     )
@@ -356,7 +356,7 @@ export async function GET() {
                       ${snippet},
                       ${item.url},
                       ${source.name},
-                      ${metal},
+                      ${metal}::"NewsMetal",
                       ${new Date(item.publishedAt)}
                     )
                     ON CONFLICT ("url") DO NOTHING

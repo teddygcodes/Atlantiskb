@@ -76,11 +76,20 @@ function toBool(value: unknown): boolean {
 }
 
 function toNullableNumber(value: unknown): number | null {
-  if (typeof value !== 'number' || Number.isNaN(value) || value <= 0) {
+  const parsed =
+    typeof value === 'number'
+      ? value
+      : typeof value === 'bigint'
+        ? Number(value)
+        : typeof value === 'string'
+          ? Number(value)
+          : NaN
+
+  if (!Number.isFinite(parsed) || Number.isNaN(parsed) || parsed <= 0) {
     return null
   }
 
-  return value
+  return parsed
 }
 
 function logOperationalSchemaErrorOnce(readiness: ComexSchemaReadiness): void {
