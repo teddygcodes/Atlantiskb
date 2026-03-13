@@ -115,9 +115,9 @@ function renderAssistantContent(content: string): ReactNode {
     const listLines = lines.filter((line) => /^[-*]\s+/.test(line))
     if (listLines.length === lines.length) {
       return (
-        <ul key={`list-${blockIndex}`} style={{ margin: '4px 0', paddingLeft: 18, color: 'var(--text-primary)' }}>
+        <ul key={`list-${blockIndex}`} style={{ margin: '2px 0', paddingLeft: 16, color: 'var(--text-primary)' }}>
           {listLines.map((line, lineIndex) => (
-            <li key={`item-${blockIndex}-${lineIndex}`} style={{ margin: '2px 0' }}>
+            <li key={`item-${blockIndex}-${lineIndex}`} style={{ margin: '1px 0', lineHeight: 1.4 }}>
               {renderInlineBold(line.replace(/^[-*]\s+/, ''))}
             </li>
           ))}
@@ -130,7 +130,7 @@ function renderAssistantContent(content: string): ReactNode {
       return (
         <p
           key={`heading-${blockIndex}`}
-          style={{ margin: '6px 0 4px', fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}
+          style={{ margin: '4px 0 2px', fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', lineHeight: 1.35 }}
         >
           {renderInlineBold(normalizedHeading)}
         </p>
@@ -138,7 +138,7 @@ function renderAssistantContent(content: string): ReactNode {
     }
 
     return (
-      <p key={`paragraph-${blockIndex}`} style={{ margin: '4px 0', color: 'var(--text-primary)' }}>
+      <p key={`paragraph-${blockIndex}`} style={{ margin: '2px 0', color: 'var(--text-primary)', lineHeight: 1.4 }}>
         {renderInlineBold(lines.join(' '))}
       </p>
     )
@@ -456,7 +456,7 @@ export default function AgentPanel({ lastSyncDate }: AgentPanelProps) {
           </div>
         )}
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {messages.map((message) => {
             const isAssistantThinking = isStreaming && message.role === 'assistant' && !message.content
 
@@ -470,8 +470,8 @@ export default function AgentPanel({ lastSyncDate }: AgentPanelProps) {
                   color: message.role === 'user' ? '#fff' : 'var(--text-primary)',
                   border: message.role === 'assistant' ? '1px solid var(--border)' : 'none',
                   borderRadius: 8,
-                  padding: '8px 10px',
-                  lineHeight: 1.45,
+                  padding: '7px 10px',
+                  lineHeight: 1.4,
                   fontSize: 13,
                 }}
               >
@@ -482,26 +482,38 @@ export default function AgentPanel({ lastSyncDate }: AgentPanelProps) {
                     : message.content}
 
                 {message.role === 'assistant' && message.sources.length > 0 && (
-                  <details style={{ marginTop: 8 }}>
-                    <summary style={{ cursor: 'pointer', fontSize: 12, color: 'var(--text-muted)' }}>
+                  <details style={{ marginTop: 6 }}>
+                    <summary
+                      style={{
+                        cursor: 'pointer',
+                        fontSize: 12,
+                        fontWeight: 500,
+                        color: 'var(--text-secondary)',
+                        listStylePosition: 'inside',
+                        background: 'var(--bg)',
+                        border: '1px solid var(--border)',
+                        borderRadius: 6,
+                        padding: '3px 8px',
+                      }}
+                    >
                       Sources ({message.sources.length})
                     </summary>
-                    <ul style={{ margin: '8px 0 0', paddingLeft: 18 }}>
+                    <ul style={{ margin: '8px 0 0', paddingLeft: 18, display: 'grid', gap: 6 }}>
                       {message.sources.map((source, index) => {
                         const link = toLink(source)
                         return (
-                          <li key={`${source}-${index}`} style={{ marginBottom: 4 }}>
+                          <li key={`${source}-${index}`} style={{ margin: 0, lineHeight: 1.35 }}>
                             {link.href ? (
                               <a
                                 href={link.href}
                                 target="_blank"
                                 rel="noreferrer"
-                                style={{ color: 'var(--accent)' }}
+                                style={{ color: 'var(--accent)', wordBreak: 'break-word', overflowWrap: 'anywhere' }}
                               >
                                 {link.label}
                               </a>
                             ) : (
-                              <span>{link.label}</span>
+                              <span style={{ wordBreak: 'break-word', overflowWrap: 'anywhere' }}>{link.label}</span>
                             )}
                           </li>
                         )
@@ -549,19 +561,19 @@ export default function AgentPanel({ lastSyncDate }: AgentPanelProps) {
         </button>
       </form>
 
-      <p style={{ margin: '10px 0 0', fontSize: 11, color: 'var(--accent)' }}>
+      <p style={{ margin: '9px 0 0', fontSize: 10, color: 'var(--text-muted)' }}>
         Not investment advice.
       </p>
 
 
       {error && (
-        <p style={{ margin: '8px 0 0', fontSize: 12, color: 'var(--accent)' }}>
+        <p style={{ margin: '6px 0 0', fontSize: 11, color: 'var(--text-muted)' }}>
           {error}
         </p>
       )}
 
       {supportRequestId && (
-        <p style={{ margin: '6px 0 0', fontSize: 11, color: 'var(--text-muted)' }}>
+        <p style={{ margin: '4px 0 0', fontSize: 10, color: 'var(--text-muted)' }}>
           If you contact support, include request ID: <code>{supportRequestId}</code>
         </p>
       )}
