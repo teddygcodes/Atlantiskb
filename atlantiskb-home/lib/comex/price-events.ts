@@ -1,8 +1,10 @@
 import { NewsMetal, PriceDirection, PriceMagnitude } from '@prisma/client'
 import { db } from '@/lib/db'
 
+const NEWS_METALS = new Set<string>(Object.values(NewsMetal))
+
 function toNewsMetal(metal: string): NewsMetal {
-  if ((Object.values(NewsMetal) as string[]).includes(metal)) {
+  if (NEWS_METALS.has(metal)) {
     return metal as NewsMetal
   }
 
