@@ -5,7 +5,7 @@ import { TerritoryMap } from '@/components/dashboard/TerritoryMap'
 import { PermitSignals } from '@/components/dashboard/PermitSignals'
 import { TopLeads } from '@/components/dashboard/TopLeads'
 import { NewsFeed } from '@/components/dashboard/NewsFeed'
-import type { NewsArticle } from '@/app/api/dashboard/news/route'
+import type { NewsArticle } from '@/app/leads/api/dashboard/news/route'
 
 export const metadata = { title: 'Dashboard — Electrical Leads Engine' }
 
