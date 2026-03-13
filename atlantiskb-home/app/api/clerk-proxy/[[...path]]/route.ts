@@ -46,13 +46,24 @@ async function handler(
     headers,
     body: hasBody ? request.body : undefined,
     ...(hasBody && { duplex: 'half' }),
+    // Forward redirects to the browser instead of following them server-side.
+    // Clerk's handshake endpoint redirects back to atlantiskb.com with session
+    // tokens; following the redirect here would cause the proxy to return HTML
+    // instead of the expected redirect response.
+    redirect: 'manual',
   } as RequestInit)
 
   console.log('[clerk-proxy] response status:', response.status)
 
   const responseHeaders = new Headers()
   response.headers.forEach((value, key) => {
-    if (!HOP_BY_HOP.has(key.toLowerCase())) responseHeaders.set(key, value)
+    if (HOP_BY_HOP.has(key.toLowerCase())) return
+    // set-cookie must use append to preserve all cookie values
+    if (key.toLowerCase() === 'set-cookie') {
+      responseHeaders.append(key, value)
+    } else {
+      responseHeaders.set(key, value)
+    }
   })
 
   return new NextResponse(response.body, {
