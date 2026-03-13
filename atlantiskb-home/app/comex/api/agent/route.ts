@@ -1,6 +1,7 @@
 import { auth } from '@clerk/nextjs/server'
 import { METAL_KEYS, type MetalKey } from '@/lib/comex/constants'
 import { buildRAGContext } from '@/lib/comex/rag'
+import { getComexSchemaReadiness } from '@/lib/comex/schema-readiness'
 
 type SetupStage = 'auth' | 'validation' | 'config' | 'embedding' | 'vector_retrieval' | 'anthropic'
 
@@ -131,16 +132,41 @@ export async function POST(req: Request): Promise<Response> {
 
   const metals = resolveMetals(body.metal)
   const history = normalizeHistory(body.history)
+  const schemaReadiness = await getComexSchemaReadiness()
+
   let ragContext
-  try {
-    ragContext = await buildRAGContext(question, metals)
-  } catch (error) {
-    const detail = error instanceof Error ? error.message : undefined
-    const stage = detail?.startsWith('Embedding generation failed:') ? 'embedding' : 'vector_retrieval'
-    logStageError(stage, error, { metals, questionLength: question.length })
-    const isDegradedRagPath = stage === 'vector_retrieval'
-    const clientDetail = isDegradedRagPath ? undefined : detail
-    return jsonError(500, stage, 'Failed to build retrieval context', clientDetail)
+  if (schemaReadiness.degraded) {
+    ragContext = {
+      question,
+      articles: [],
+      prices: {
+        copper: {
+          metal: 'copper' as const,
+          current: null,
+          change30dPct: null,
+          change90dPct: null,
+          recentLargeEvents: [],
+        },
+        aluminum: {
+          metal: 'aluminum' as const,
+          current: null,
+          change30dPct: null,
+          change90dPct: null,
+          recentLargeEvents: [],
+        },
+      },
+    }
+  } else {
+    try {
+      ragContext = await buildRAGContext(question, metals)
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : undefined
+      const stage = detail?.startsWith('Embedding generation failed:') ? 'embedding' : 'vector_retrieval'
+      logStageError(stage, error, { metals, questionLength: question.length })
+      const isDegradedRagPath = stage === 'vector_retrieval'
+      const clientDetail = isDegradedRagPath ? undefined : detail
+      return jsonError(500, stage, 'Failed to build retrieval context', clientDetail)
+    }
   }
 
   const system = buildSystemPrompt(JSON.stringify(ragContext, null, 2))
@@ -187,6 +213,8 @@ export async function POST(req: Request): Promise<Response> {
       'content-type': 'text/event-stream; charset=utf-8',
       'cache-control': 'no-cache, no-transform',
       connection: 'keep-alive',
+      'x-comex-schema-ready': String(schemaReadiness.ready),
+      'x-comex-agent-mode': schemaReadiness.degraded ? 'degraded' : 'normal',
     },
   })
 }
