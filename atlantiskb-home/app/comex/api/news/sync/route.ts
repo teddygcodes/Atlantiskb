@@ -22,6 +22,9 @@ type SourceResult = {
   timedOut: number;
   metalCounts: Record<NewsMetal, number>;
   errors: string[];
+  insertRowsAttempted: number;
+  insertDurationMs: number;
+  insertBatchCount: number;
 };
 
 const SOURCE_TIMEOUT_MS = 12_000;
@@ -168,6 +171,9 @@ export async function GET() {
       timedOut: 0,
       metalCounts: { copper: 0, aluminum: 0, both: 0 },
       errors: [],
+      insertRowsAttempted: 0,
+      insertDurationMs: 0,
+      insertBatchCount: 0,
     };
 
     try {
@@ -332,61 +338,105 @@ export async function GET() {
         }
 
         const insertEnd = stageTimer(source.name, "insert_rows");
+        const insertStart = Date.now();
+        sourceResult.insertRowsAttempted = toInsert.length;
+        let insertBatchCount = 0;
+        const CHUNK_SIZE = 25;
+
+        // Pre-compute metal for each item and update metalCounts upfront.
+        // Split into two typed arrays so each INSERT uses a consistent column list.
+        const withoutEmbedding: Array<{
+          item: (typeof toInsert)[number];
+          snippet: string;
+          metal: NewsMetal;
+        }> = [];
+        const withEmbedding: Array<{
+          item: (typeof toInsert)[number];
+          snippet: string;
+          metal: NewsMetal;
+          embedding: number[];
+        }> = [];
+
+        for (const [index, item] of toInsert.entries()) {
+          const snippet = snippets[index] ?? "";
+          const metal = inferMetal(`${item.title} ${snippet}`);
+          sourceResult.metalCounts[metal] += 1;
+          const emb = embeddingsByIndex[index];
+          if (Array.isArray(emb)) {
+            withEmbedding.push({ item, snippet, metal, embedding: emb });
+          } else {
+            withoutEmbedding.push({ item, snippet, metal });
+          }
+        }
+
         sourceResult.inserted = await withTimeout(
           "insert_rows",
           STAGE_TIMEOUT_MS,
           async () => {
             let inserted = 0;
 
-            for (const [index, item] of toInsert.entries()) {
-              const snippet = snippets[index];
-              const embedding = embeddingsByIndex[index];
-              const metal = inferMetal(`${item.title} ${snippet}`);
-              const metalSql = toNewsMetalSqlLiteral(metal);
-              sourceResult.metalCounts[metal] += 1;
-
-              console.info("news.sync.insert_row", {
-                source: source.name,
-                insertPath: embedding ? "with_embedding" : "without_embedding",
-                metal,
-                url: item.url,
+            // Batch insert rows without embedding (chunked at CHUNK_SIZE rows)
+            for (let i = 0; i < withoutEmbedding.length; i += CHUNK_SIZE) {
+              const chunk = withoutEmbedding.slice(i, i + CHUNK_SIZE);
+              const rowFragments = chunk.map(({ item, snippet, metal }) => {
+                const metalSql = toNewsMetalSqlLiteral(metal);
+                return Prisma.sql`(
+                  ${createCuid(item.url + item.publishedAt)},
+                  ${item.title},
+                  ${snippet},
+                  ${item.url},
+                  ${source.name},
+                  ${metalSql},
+                  ${new Date(item.publishedAt)}
+                )`;
               });
+              const count = await prisma.$executeRaw(Prisma.sql`
+                INSERT INTO "NewsArticle" ("id", "headline", "snippet", "url", "source", "metal", "publishedAt")
+                VALUES ${Prisma.join(rowFragments)}
+                ON CONFLICT ("url") DO NOTHING
+              `);
+              inserted += Number(count);
+              insertBatchCount += 1;
+            }
 
-              const rowCount = embedding
-                ? await prisma.$executeRaw`
-                  INSERT INTO "NewsArticle" ("id", "headline", "snippet", "url", "source", "metal", "publishedAt", "embedding")
-                  VALUES (
-                    ${createCuid(item.url + item.publishedAt)},
-                    ${item.title},
-                    ${snippet},
-                    ${item.url},
-                    ${source.name},
-                    ${metalSql},
-                    ${new Date(item.publishedAt)},
-                    ${`[${embedding.join(",")}]`}::vector
-                  )
-                  ON CONFLICT ("url") DO NOTHING
-                `
-                : await prisma.$executeRaw`
-                  INSERT INTO "NewsArticle" ("id", "headline", "snippet", "url", "source", "metal", "publishedAt")
-                  VALUES (
-                    ${createCuid(item.url + item.publishedAt)},
-                    ${item.title},
-                    ${snippet},
-                    ${item.url},
-                    ${source.name},
-                    ${metalSql},
-                    ${new Date(item.publishedAt)}
-                  )
-                  ON CONFLICT ("url") DO NOTHING
-                `;
-
-              inserted += Number(rowCount);
+            // Batch insert rows with embedding (chunked at CHUNK_SIZE rows)
+            for (let i = 0; i < withEmbedding.length; i += CHUNK_SIZE) {
+              const chunk = withEmbedding.slice(i, i + CHUNK_SIZE);
+              const rowFragments = chunk.map(({ item, snippet, metal, embedding }) => {
+                const metalSql = toNewsMetalSqlLiteral(metal);
+                return Prisma.sql`(
+                  ${createCuid(item.url + item.publishedAt)},
+                  ${item.title},
+                  ${snippet},
+                  ${item.url},
+                  ${source.name},
+                  ${metalSql},
+                  ${new Date(item.publishedAt)},
+                  ${`[${embedding.join(",")}]`}::vector
+                )`;
+              });
+              const count = await prisma.$executeRaw(Prisma.sql`
+                INSERT INTO "NewsArticle" ("id", "headline", "snippet", "url", "source", "metal", "publishedAt", "embedding")
+                VALUES ${Prisma.join(rowFragments)}
+                ON CONFLICT ("url") DO NOTHING
+              `);
+              inserted += Number(count);
+              insertBatchCount += 1;
             }
 
             return inserted;
           },
         ).finally(insertEnd);
+
+        sourceResult.insertDurationMs = Date.now() - insertStart;
+        sourceResult.insertBatchCount = insertBatchCount;
+
+        console.info("news.sync.insert_batch", {
+          source: source.name,
+          rowsAttempted: sourceResult.insertRowsAttempted,
+          insertDurationMs: sourceResult.insertDurationMs,
+          batchCount: sourceResult.insertBatchCount,
+        });
 
         console.info("news.sync.source_insert", {
           source: source.name,
