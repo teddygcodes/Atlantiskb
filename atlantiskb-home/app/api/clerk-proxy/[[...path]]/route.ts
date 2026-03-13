@@ -3,6 +3,9 @@ import { NextRequest, NextResponse } from 'next/server'
 const HOP_BY_HOP = new Set([
   'connection', 'keep-alive', 'proxy-authenticate', 'proxy-authorization',
   'te', 'trailer', 'transfer-encoding', 'upgrade',
+  // Node fetch auto-decompresses responses, so strip these to avoid
+  // the browser trying to decompress an already-decompressed body
+  'content-encoding', 'content-length',
 ])
 
 // Derive Clerk FAPI base URL from the publishable key.
