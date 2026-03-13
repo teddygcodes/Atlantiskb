@@ -2,6 +2,7 @@ import { NewsMetal, PriceDirection, PriceMagnitude } from '@prisma/client'
 import { db } from '@/lib/db'
 
 export async function syncPriceEvents(metal: string): Promise<void> {
+  const eventMetal = metal as NewsMetal
   const prices = await db.commodityPrice.findMany({
     where: { metal },
     orderBy: { settlementDate: 'asc' },
@@ -18,6 +19,12 @@ export async function syncPriceEvents(metal: string): Promise<void> {
     const changePercent = ((curr.close - prev.close) / prev.close) * 100
 
     if (Math.abs(changePercent) < 1) {
+      await db.priceEvent.deleteMany({
+        where: {
+          metal: eventMetal,
+          date: curr.settlementDate,
+        },
+      })
       continue
     }
 
@@ -29,23 +36,23 @@ export async function syncPriceEvents(metal: string): Promise<void> {
     await db.priceEvent.upsert({
       where: {
         metal_date: {
-          metal: metal as NewsMetal,
+          metal: eventMetal,
           date: curr.settlementDate,
         },
       },
       create: {
-        metal: metal as NewsMetal,
+        metal: eventMetal,
         date: curr.settlementDate,
         close: curr.close,
         prevClose: prev.close,
-        change: changePercent,
+        changePercent,
         direction,
         magnitude,
       },
       update: {
         close: curr.close,
         prevClose: prev.close,
-        change: changePercent,
+        changePercent,
         direction,
         magnitude,
       },

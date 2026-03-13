@@ -282,11 +282,14 @@ model NewsArticle {
 }
 
 model PriceEvent {
-  id        String         @id @default(cuid())
-  metal     NewsMetal
-  date      DateTime
-  direction PriceDirection
-  magnitude PriceMagnitude
+  id            String         @id @default(cuid())
+  metal         NewsMetal
+  date          DateTime
+  close         Float
+  prevClose     Float
+  changePercent Float
+  direction     PriceDirection
+  magnitude     PriceMagnitude
 
   @@unique([metal, date])
   @@index([metal])
