@@ -134,7 +134,35 @@ export default function AgentPanel({ lastSyncDate }: AgentPanelProps) {
         body: JSON.stringify({ question: trimmed, history }),
       })
 
-      if (!res.ok || !res.body) {
+      if (!res.ok) {
+        const fallbackMessage = 'Unable to get agent response'
+        let diagnosticMessage: string | null = null
+
+        try {
+          const bodyText = await res.text()
+          const parsedError = JSON.parse(bodyText) as {
+            stage?: string
+            error?: string
+            detail?: string
+          }
+
+          const stage = typeof parsedError.stage === 'string' ? parsedError.stage : ''
+          const errorMessage = typeof parsedError.error === 'string' ? parsedError.error : ''
+          const detailMessage = typeof parsedError.detail === 'string' ? parsedError.detail : ''
+          const reason = [errorMessage, detailMessage].filter(Boolean).join(' ')
+
+          if (reason) {
+            const stageLabel = stage || 'unknown'
+            diagnosticMessage = `Agent error [${stageLabel}]: ${reason}`
+          }
+        } catch {
+          // Fall through to generic message when body parsing fails.
+        }
+
+        throw new Error(diagnosticMessage ?? fallbackMessage)
+      }
+
+      if (!res.body) {
         throw new Error('Unable to get agent response')
       }
 
