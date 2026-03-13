@@ -1,6 +1,6 @@
 import { auth } from '@clerk/nextjs/server'
 import { METAL_KEYS, type MetalKey } from '@/lib/comex/constants'
-import { buildRAGContext } from '@/lib/comex/rag'
+import { buildRAGContext, type RetrievalMode } from '@/lib/comex/rag'
 import { getComexSchemaReadiness } from '@/lib/comex/schema-readiness'
 
 type SetupStage = 'auth' | 'validation' | 'config' | 'embedding' | 'vector_retrieval' | 'anthropic'
@@ -100,7 +100,11 @@ function sanitizeDetail(detail: string): string {
 
 function resolveRetrievalStage(detail?: string): { stage: SetupStage; code: ErrorCode } {
   if (!detail) return { stage: 'vector_retrieval', code: 'retrieval_error' }
+  const normalized = detail.toLowerCase()
   if (detail.startsWith('Fallback retrieval failed:')) return { stage: 'vector_retrieval', code: 'retrieval_fallback' }
+  if (normalized.includes('vector dimensions') || normalized.includes('different vector dimensions')) {
+    return { stage: 'vector_retrieval', code: 'retrieval_fallback' }
+  }
   if (detail.startsWith('Price history retrieval failed:')) return { stage: 'vector_retrieval', code: 'retrieval_prices' }
   if (detail.startsWith('Large event retrieval failed:')) return { stage: 'vector_retrieval', code: 'retrieval_events' }
   return { stage: 'vector_retrieval', code: 'retrieval_error' }
@@ -206,6 +210,7 @@ export async function POST(req: Request): Promise<Response> {
   const schemaReadiness = await getComexSchemaReadiness()
 
   let ragContext
+  let retrievalMode: RetrievalMode = 'none'
   if (schemaReadiness.degraded) {
     ragContext = {
       question,
@@ -227,9 +232,12 @@ export async function POST(req: Request): Promise<Response> {
         },
       },
     }
+    retrievalMode = 'none'
   } else {
     try {
-      ragContext = await buildRAGContext(question, metals)
+      const ragResult = await buildRAGContext(question, metals)
+      ragContext = ragResult.context
+      retrievalMode = ragResult.retrievalMode
     } catch (error) {
       const detail = error instanceof Error ? error.message : undefined
       const stageAndCode = detail?.startsWith('Embedding generation failed:')
@@ -309,6 +317,7 @@ export async function POST(req: Request): Promise<Response> {
       connection: 'keep-alive',
       'x-comex-schema-ready': String(schemaReadiness.ready),
       'x-comex-agent-mode': schemaReadiness.degraded ? 'degraded' : 'normal',
+      'x-comex-retrieval-mode': retrievalMode,
       'x-request-id': requestId,
     },
   })
