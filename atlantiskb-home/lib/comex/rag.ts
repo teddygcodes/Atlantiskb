@@ -5,8 +5,10 @@ import { METAL_KEYS, type MetalKey } from '@/lib/comex/constants'
 
 interface SimilarityRow {
   id: string
+  headline: string
   snippet: string
   url: string
+  source: string
   metal: MetalKey | 'both'
   publishedAt: Date
   similarity: number
@@ -40,8 +42,10 @@ function isMissingRelationError(error: unknown, relation: string): boolean {
 
 export interface RetrievedArticle {
   id: string
+  headline: string
   snippet: string
   url: string
+  source: string
   metal: MetalKey | 'both'
   publishedAt: string
   similarity: number
@@ -156,8 +160,10 @@ async function buildRetrievedArticles(similarRows: SimilarityRow[], activeMetals
 
     articles.push({
       id: row.id,
+      headline: row.headline,
       snippet: row.snippet,
       url: row.url,
+      source: row.source,
       metal: row.metal,
       publishedAt: row.publishedAt.toISOString(),
       similarity: Number(row.similarity.toFixed(4)),
@@ -181,16 +187,20 @@ async function fetchFallbackRows(question: string, activeMetals: MetalKey[]): Pr
 
   const articleSelect = {
     id: true,
+    headline: true,
     snippet: true,
     url: true,
+    source: true,
     metal: true,
     publishedAt: true,
   } as const
 
   let candidateRows: Array<{
     id: string
+    headline: string
     snippet: string
     url: string
+    source: string
     metal: string
     publishedAt: Date
   }> = []
@@ -259,8 +269,10 @@ async function fetchFallbackRows(question: string, activeMetals: MetalKey[]): Pr
 
   const rows = prioritized.map((row) => ({
     id: row.id,
+    headline: row.headline,
     snippet: row.snippet,
     url: row.url,
+    source: row.source,
     metal: row.metal as MetalKey | 'both',
     publishedAt: row.publishedAt,
     similarity: row.similarity,
@@ -377,8 +389,10 @@ export async function buildRAGContext(question: string, metals: MetalKey[]): Pro
       similarRows = await db.$queryRaw<SimilarityRow[]>(Prisma.sql`
         SELECT
           "id",
+          "headline",
           "snippet",
           "url",
+          "source",
           "metal",
           "publishedAt",
           1 - ("embedding" <=> ${vectorLiteral}::vector) AS "similarity"

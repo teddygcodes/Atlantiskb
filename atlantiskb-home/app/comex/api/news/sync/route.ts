@@ -150,11 +150,13 @@ export async function GET() {
             // `embedding` is intentionally unmanaged by Prisma in this model.
             // We set it via raw SQL only when vector-search readiness checks pass.
             return prisma.$executeRaw`
-              INSERT INTO "NewsArticle" ("id", "snippet", "url", "metal", "publishedAt", "embedding")
+              INSERT INTO "NewsArticle" ("id", "headline", "snippet", "url", "source", "metal", "publishedAt", "embedding")
               VALUES (
                 ${createCuid(item.url + item.publishedAt)},
+                ${item.title},
                 ${snippet},
                 ${item.url},
+                ${source.name},
                 ${inferMetal(`${item.title} ${snippet}`)},
                 ${new Date(item.publishedAt)},
                 ${embeddingLiteral}::vector
@@ -165,11 +167,13 @@ export async function GET() {
 
           // Fallback insert path without `embedding` for readiness/validation failures.
           return prisma.$executeRaw`
-            INSERT INTO "NewsArticle" ("id", "snippet", "url", "metal", "publishedAt")
+            INSERT INTO "NewsArticle" ("id", "headline", "snippet", "url", "source", "metal", "publishedAt")
             VALUES (
               ${createCuid(item.url + item.publishedAt)},
+              ${item.title},
               ${snippet},
               ${item.url},
+              ${source.name},
               ${inferMetal(`${item.title} ${snippet}`)},
               ${new Date(item.publishedAt)}
             )
