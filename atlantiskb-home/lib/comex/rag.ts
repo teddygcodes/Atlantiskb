@@ -172,25 +172,57 @@ async function fetchFallbackRows(question: string, activeMetals: MetalKey[]): Pr
     publishedAt: true,
   } as const
 
-  let candidateRows = await db.newsArticle.findMany({
-    where: {
-      metal: { in: metalFilter },
-      publishedAt: { gte: since },
-    },
-    orderBy: { publishedAt: 'desc' },
-    select: articleSelect,
-    take: 24,
-  })
+  let candidateRows: Array<{
+    id: string
+    snippet: string
+    url: string
+    metal: string
+    publishedAt: Date
+  }> = []
 
-  if (candidateRows.length === 0) {
+  try {
     candidateRows = await db.newsArticle.findMany({
       where: {
         metal: { in: metalFilter },
+        publishedAt: { gte: since },
       },
       orderBy: { publishedAt: 'desc' },
       select: articleSelect,
-      take: 8,
+      take: 24,
     })
+  } catch (error) {
+    if (isMissingRelationError(error, 'NewsArticle')) {
+      console.warn('[comex-rag] NewsArticle relation is missing. Degrading to empty article context.', {
+        activeMetals,
+        strategy: 'fallback_recent',
+      })
+      return []
+    }
+
+    throw error
+  }
+
+  if (candidateRows.length === 0) {
+    try {
+      candidateRows = await db.newsArticle.findMany({
+        where: {
+          metal: { in: metalFilter },
+        },
+        orderBy: { publishedAt: 'desc' },
+        select: articleSelect,
+        take: 8,
+      })
+    } catch (error) {
+      if (isMissingRelationError(error, 'NewsArticle')) {
+        console.warn('[comex-rag] NewsArticle relation is missing. Degrading to empty article context.', {
+          activeMetals,
+          strategy: 'fallback_global',
+        })
+        return []
+      }
+
+      throw error
+    }
   }
 
   const scored = candidateRows.map((row) => {

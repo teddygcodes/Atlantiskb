@@ -138,7 +138,9 @@ export async function POST(req: Request): Promise<Response> {
     const detail = error instanceof Error ? error.message : undefined
     const stage = detail?.startsWith('Embedding generation failed:') ? 'embedding' : 'vector_retrieval'
     logStageError(stage, error, { metals, questionLength: question.length })
-    return jsonError(500, stage, 'Failed to build retrieval context', detail)
+    const isDegradedRagPath = stage === 'vector_retrieval'
+    const clientDetail = isDegradedRagPath ? undefined : detail
+    return jsonError(500, stage, 'Failed to build retrieval context', clientDetail)
   }
 
   const system = buildSystemPrompt(JSON.stringify(ragContext, null, 2))
