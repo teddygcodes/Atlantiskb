@@ -34,6 +34,12 @@ async function handler(
   })
   headers.set('Host', new URL(CLERK_BASE).host)
 
+  // Required by Clerk FAPI to identify and validate the proxy
+  headers.set('Clerk-Proxy-Url', process.env.NEXT_PUBLIC_CLERK_PROXY_URL ?? '')
+  headers.set('Clerk-Secret-Key', process.env.CLERK_SECRET_KEY ?? '')
+  headers.set('X-Forwarded-Host', new URL(request.url).host)
+  headers.set('X-Forwarded-Proto', 'https')
+
   const hasBody = ['POST', 'PUT', 'PATCH'].includes(request.method)
   const response = await fetch(targetUrl.toString(), {
     method: request.method,
