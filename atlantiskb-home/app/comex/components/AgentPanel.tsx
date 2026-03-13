@@ -266,12 +266,11 @@ export default function AgentPanel({ lastSyncDate }: AgentPanelProps) {
         border: '1px solid var(--border)',
         borderRadius: 8,
         boxShadow: 'var(--shadow-sm)',
-        padding: 16,
-        marginTop: 20,
+        padding: 22,
       }}
     >
       <div style={{ marginBottom: 10 }}>
-        <h2 style={{ margin: 0, fontSize: 16, color: 'var(--text-primary)' }}>COMEX Agent</h2>
+        <h2 style={{ margin: 0, fontSize: 18, color: 'var(--text-primary)' }}>COMEX Agent</h2>
         <p style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--text-muted)' }}>
           Last synced settlement data: {lastSyncDate}
         </p>
@@ -282,8 +281,8 @@ export default function AgentPanel({ lastSyncDate }: AgentPanelProps) {
           border: '1px solid var(--border)',
           borderRadius: 8,
           background: 'var(--bg)',
-          minHeight: 260,
-          maxHeight: 420,
+          minHeight: 320,
+          maxHeight: 520,
           overflowY: 'auto',
           padding: 12,
         }}
@@ -321,7 +320,7 @@ export default function AgentPanel({ lastSyncDate }: AgentPanelProps) {
                 key={message.id}
                 style={{
                   alignSelf: message.role === 'user' ? 'flex-end' : 'flex-start',
-                  maxWidth: '88%',
+                  maxWidth: '82%',
                   background: message.role === 'user' ? 'var(--accent)' : 'var(--surface)',
                   color: message.role === 'user' ? '#fff' : 'var(--text-primary)',
                   border: message.role === 'assistant' ? '1px solid var(--border)' : 'none',
@@ -369,7 +368,7 @@ export default function AgentPanel({ lastSyncDate }: AgentPanelProps) {
         </div>
       </div>
 
-      <form onSubmit={handleSubmit} style={{ marginTop: 12, display: 'flex', gap: 8 }}>
+      <form onSubmit={handleSubmit} style={{ marginTop: 14, display: 'flex', gap: 10 }}>
         <input
           value={input}
           onChange={(event) => setInput(event.target.value)}
