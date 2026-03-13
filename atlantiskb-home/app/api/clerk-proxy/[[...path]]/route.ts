@@ -5,7 +5,7 @@ const HOP_BY_HOP = new Set([
   'te', 'trailer', 'transfer-encoding', 'upgrade',
 ])
 
-// Derive the Clerk FAPI base URL from the publishable key.
+// Derive Clerk FAPI base URL from the publishable key.
 // Format: pk_test_{base64(frontendApi + "$")} or pk_live_{...}
 const pk = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ?? ''
 const b64 = pk.replace(/^pk_(test|live)_/, '')
