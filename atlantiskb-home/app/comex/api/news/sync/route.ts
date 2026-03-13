@@ -11,6 +11,7 @@ type SourceResult = {
   source: string
   fetched: number
   embedded: number
+  insertedWithoutEmbedding?: number
   skipped: number
   error?: string
 }
@@ -101,15 +102,53 @@ export async function GET() {
 
       const snippets = toInsert.map((item) => toSnippet(item.title, item.content))
       const supportsVectorSearch = schemaReadiness.optional.vectorSearchReady
-      const embeddings = supportsVectorSearch ? await embedBatch(snippets) : []
+      const embeddingsByIndex: Array<number[] | null> = toInsert.map(() => null)
+      let insertedWithoutEmbedding = 0
+
+      if (supportsVectorSearch) {
+        const expectedEmbeddingDimension = 512
+        const embeddings = await embedBatch(snippets)
+
+        if (embeddings.length !== toInsert.length) {
+          insertedWithoutEmbedding = toInsert.length
+          console.error('news.sync.embedding_length_mismatch', {
+            source: source.name,
+            expectedRows: toInsert.length,
+            actualEmbeddings: embeddings.length,
+            action: 'insert_without_embedding',
+          })
+        } else {
+          embeddings.forEach((embedding, index) => {
+            if (embedding.length !== expectedEmbeddingDimension) {
+              insertedWithoutEmbedding += 1
+              console.error('news.sync.embedding_dimension_mismatch', {
+                source: source.name,
+                index,
+                url: toInsert[index]?.url,
+                expectedDimension: expectedEmbeddingDimension,
+                actualDimension: embedding.length,
+                action: 'insert_without_embedding',
+              })
+              return
+            }
+
+            embeddingsByIndex[index] = embedding
+          })
+        }
+      }
+
+      const embeddedCount = embeddingsByIndex.filter((embedding) => embedding !== null).length
 
       await prisma.$transaction(
         toInsert.map((item, index) => {
           const snippet = snippets[index]
+          const embedding = embeddingsByIndex[index]
 
-          if (supportsVectorSearch) {
-            const embeddingLiteral = `[${embeddings[index].join(',')}]`
+          if (embedding) {
+            const embeddingLiteral = `[${embedding.join(',')}]`
 
+            // `embedding` is intentionally unmanaged by Prisma in this model.
+            // We set it via raw SQL only when vector-search readiness checks pass.
             return prisma.$executeRaw`
               INSERT INTO "NewsArticle" ("id", "snippet", "url", "metal", "publishedAt", "embedding")
               VALUES (
@@ -124,6 +163,7 @@ export async function GET() {
             `
           }
 
+          // Fallback insert path without `embedding` for readiness/validation failures.
           return prisma.$executeRaw`
             INSERT INTO "NewsArticle" ("id", "snippet", "url", "metal", "publishedAt")
             VALUES (
@@ -141,7 +181,8 @@ export async function GET() {
       results.push({
         source: source.name,
         fetched: items.length,
-        embedded: supportsVectorSearch ? toInsert.length : 0,
+        embedded: embeddedCount,
+        insertedWithoutEmbedding,
         skipped: candidates.length - toInsert.length,
       })
     } catch (err) {
