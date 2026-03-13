@@ -89,20 +89,10 @@ export function Sidebar() {
       <div style={{ borderTop: '1px solid #e5e7eb', padding: '10px 14px 12px' }}>
         <Link
           href="/"
+          className="mb-2 flex items-center gap-[7px] rounded-[5px] px-2 py-[5px] text-[12px] text-gray-400 no-underline transition-colors hover:bg-gray-100 hover:text-gray-700"
           style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '7px',
-            borderRadius: '5px',
-            padding: '5px 8px',
-            fontSize: '12px',
-            color: '#9ca3af',
-            textDecoration: 'none',
-            marginBottom: '8px',
             transition: 'background 0.1s, color 0.1s',
           }}
-          onMouseEnter={e => { (e.currentTarget as HTMLAnchorElement).style.background = '#f3f4f6'; (e.currentTarget as HTMLAnchorElement).style.color = '#374151' }}
-          onMouseLeave={e => { (e.currentTarget as HTMLAnchorElement).style.background = 'transparent'; (e.currentTarget as HTMLAnchorElement).style.color = '#9ca3af' }}
         >
           <Home size={13} />
           All tools
@@ -111,16 +101,10 @@ export function Sidebar() {
           <UserButton appearance={{ elements: { avatarBox: 'w-7 h-7' } }} />
           <Link
             href="/leads/settings"
+            className="flex items-center rounded-[5px] p-[5px] text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700"
             style={{
-              borderRadius: '5px',
-              padding: '5px',
-              color: '#9ca3af',
-              display: 'flex',
-              alignItems: 'center',
               transition: 'background 0.1s, color 0.1s',
             }}
-            onMouseEnter={e => { (e.currentTarget as HTMLAnchorElement).style.background = '#f3f4f6'; (e.currentTarget as HTMLAnchorElement).style.color = '#374151' }}
-            onMouseLeave={e => { (e.currentTarget as HTMLAnchorElement).style.background = 'transparent'; (e.currentTarget as HTMLAnchorElement).style.color = '#9ca3af' }}
           >
             <Settings size={15} />
           </Link>
