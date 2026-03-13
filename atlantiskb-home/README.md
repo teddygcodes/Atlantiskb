@@ -47,6 +47,7 @@ Create `.env.local` in the project root:
 | `CLERK_SECRET_KEY` | Clerk secret key (starts with `sk_`) |
 | `NEXT_PUBLIC_CLERK_SIGN_IN_URL` | Sign-in route — set to `/sign-in` |
 | `NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL` | Post-login redirect — set to `/` |
+| `VOYAGE_API_KEY` | Voyage API key for embeddings requests (server-side only) |
 
 **4. Run locally**
 
@@ -80,7 +81,7 @@ That is the only change needed. The card renders automatically. Setting `status:
 
 ## Deployment
 
-Deploy to Vercel. Connect the repository, add the four environment variables from `.env.local` to the Vercel project settings, and set the custom domain to `atlantiskb.com`.
+Deploy to Vercel. Connect the repository, add the five environment variables from `.env.local` to the Vercel project settings (including `VOYAGE_API_KEY`), and set the custom domain to `atlantiskb.com`.
 
 Each tool runs on its own subdomain (`leads.atlantiskb.com`, etc.) as a separate application. This launchpad only links to them — it does not host them.
 
