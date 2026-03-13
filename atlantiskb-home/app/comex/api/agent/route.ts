@@ -4,6 +4,16 @@ import { buildRAGContext } from '@/lib/comex/rag'
 import { getComexSchemaReadiness } from '@/lib/comex/schema-readiness'
 
 type SetupStage = 'auth' | 'validation' | 'config' | 'embedding' | 'vector_retrieval' | 'anthropic'
+type ErrorCode =
+  | 'auth_error'
+  | 'validation_error'
+  | 'config_error'
+  | 'embedding_error'
+  | 'retrieval_error'
+  | 'retrieval_fallback'
+  | 'retrieval_prices'
+  | 'retrieval_events'
+  | 'anthropic_error'
 
 interface HistoryTurn {
   role: 'user' | 'assistant'
@@ -14,6 +24,12 @@ interface RequestBody {
   question?: unknown
   history?: unknown
   metal?: unknown
+}
+
+interface ErrorResponseOptions {
+  detail?: string
+  code: ErrorCode
+  requestId: string
 }
 
 function normalizeQuestion(value: unknown): string {
@@ -60,10 +76,48 @@ Context JSON:
 ${contextJson}`
 }
 
-function jsonError(status: number, stage: SetupStage, message: string, detail?: string): Response {
-  return new Response(JSON.stringify({ error: message, stage, detail }), {
+function getRequestId(req: Request): string {
+  const incoming = req.headers.get('x-request-id')?.trim()
+  if (incoming) return incoming.slice(0, 128)
+  return crypto.randomUUID()
+}
+
+function shouldExposeDetail(userId: string | null): boolean {
+  if (process.env.NODE_ENV !== 'production') return true
+  if (!userId) return false
+
+  const adminIds = (process.env.COMEX_ADMIN_USER_IDS ?? '')
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean)
+
+  return adminIds.includes(userId)
+}
+
+function sanitizeDetail(detail: string): string {
+  return detail.replace(/\s+/g, ' ').trim().slice(0, 400)
+}
+
+function resolveRetrievalStage(detail?: string): { stage: SetupStage; code: ErrorCode } {
+  if (!detail) return { stage: 'vector_retrieval', code: 'retrieval_error' }
+  if (detail.startsWith('Fallback retrieval failed:')) return { stage: 'vector_retrieval', code: 'retrieval_fallback' }
+  if (detail.startsWith('Price history retrieval failed:')) return { stage: 'vector_retrieval', code: 'retrieval_prices' }
+  if (detail.startsWith('Large event retrieval failed:')) return { stage: 'vector_retrieval', code: 'retrieval_events' }
+  return { stage: 'vector_retrieval', code: 'retrieval_error' }
+}
+
+function jsonError(
+  status: number,
+  stage: SetupStage,
+  message: string,
+  { detail, code, requestId }: ErrorResponseOptions,
+): Response {
+  return new Response(JSON.stringify({ error: message, stage, code, requestId, detail }), {
     status,
-    headers: { 'content-type': 'application/json' },
+    headers: {
+      'content-type': 'application/json',
+      'x-request-id': requestId,
+    },
   })
 }
 
@@ -90,44 +144,61 @@ function getRuntimeConfig(): {
 }
 
 export async function POST(req: Request): Promise<Response> {
+  const requestId = getRequestId(req)
   let userId: string | null = null
+
   try {
     const authResult = await auth()
     userId = authResult.userId
   } catch (error) {
-    logStageError('auth', error)
-    return jsonError(500, 'auth', 'Auth failed during request setup')
+    logStageError('auth', error, { requestId })
+    return jsonError(500, 'auth', 'Request failed. Please try again later.', {
+      code: 'auth_error',
+      requestId,
+    })
   }
 
   if (!userId) {
-    return jsonError(401, 'auth', 'Unauthorized')
+    return jsonError(401, 'auth', 'Request failed. Please try again later.', {
+      code: 'auth_error',
+      requestId,
+    })
   }
 
   let body: RequestBody
   try {
     body = (await req.json()) as RequestBody
   } catch (error) {
-    logStageError('validation', error)
-    return jsonError(400, 'validation', 'Invalid JSON body')
+    logStageError('validation', error, { requestId, userId })
+    return jsonError(400, 'validation', 'Request failed. Please try again later.', {
+      code: 'validation_error',
+      requestId,
+    })
   }
 
   const question = normalizeQuestion(body.question)
   if (!question) {
-    return jsonError(400, 'validation', 'Question is required')
+    return jsonError(400, 'validation', 'Request failed. Please try again later.', {
+      code: 'validation_error',
+      requestId,
+    })
   }
 
   const { anthropicApiKey, hasVoyageApiKey, hasDatabaseUrl, hasDirectUrl } = getRuntimeConfig()
   if (!anthropicApiKey) {
-    logStageError('config', new Error('ANTHROPIC_API_KEY is missing'))
-    return jsonError(500, 'config', 'ANTHROPIC_API_KEY is not configured')
+    logStageError('config', new Error('ANTHROPIC_API_KEY is missing'), { requestId, userId })
+    return jsonError(500, 'config', 'Request failed. Please try again later.', {
+      code: 'config_error',
+      requestId,
+    })
   }
 
   if (!hasVoyageApiKey) {
-    logStageError('config', new Error('VOYAGE_API_KEY is missing; semantic retrieval will be skipped'))
+    logStageError('config', new Error('VOYAGE_API_KEY is missing; semantic retrieval will be skipped'), { requestId, userId })
   }
 
   if (!hasDatabaseUrl && !hasDirectUrl) {
-    logStageError('config', new Error('DATABASE_URL and DIRECT_URL are both missing'))
+    logStageError('config', new Error('DATABASE_URL and DIRECT_URL are both missing'), { requestId, userId })
   }
 
   const metals = resolveMetals(body.metal)
@@ -161,11 +232,24 @@ export async function POST(req: Request): Promise<Response> {
       ragContext = await buildRAGContext(question, metals)
     } catch (error) {
       const detail = error instanceof Error ? error.message : undefined
-      const stage = detail?.startsWith('Embedding generation failed:') ? 'embedding' : 'vector_retrieval'
-      logStageError(stage, error, { metals, questionLength: question.length })
-      const isDegradedRagPath = stage === 'vector_retrieval'
-      const clientDetail = isDegradedRagPath ? undefined : detail
-      return jsonError(500, stage, 'Failed to build retrieval context', clientDetail)
+      const stageAndCode = detail?.startsWith('Embedding generation failed:')
+        ? { stage: 'embedding' as const, code: 'embedding_error' as const }
+        : resolveRetrievalStage(detail)
+
+      logStageError(stageAndCode.stage, error, {
+        requestId,
+        userId,
+        code: stageAndCode.code,
+        metals,
+        questionLength: question.length,
+      })
+
+      const clientDetail = shouldExposeDetail(userId) && detail ? sanitizeDetail(detail) : undefined
+      return jsonError(500, stageAndCode.stage, 'Request failed. Please try again later.', {
+        code: stageAndCode.code,
+        requestId,
+        detail: clientDetail,
+      })
     }
   }
 
@@ -194,18 +278,28 @@ export async function POST(req: Request): Promise<Response> {
       }),
     })
   } catch (error) {
-    logStageError('anthropic', error, { userId })
-    return jsonError(502, 'anthropic', 'Anthropic request threw before receiving a response', error instanceof Error ? error.message : undefined)
+    logStageError('anthropic', error, { requestId, userId })
+    return jsonError(502, 'anthropic', 'Request failed. Please try again later.', {
+      code: 'anthropic_error',
+      requestId,
+      detail: shouldExposeDetail(userId) && error instanceof Error ? sanitizeDetail(error.message) : undefined,
+    })
   }
 
   if (!anthropicResponse.ok || !anthropicResponse.body) {
     const errorText = await anthropicResponse.text()
     logStageError('anthropic', new Error('Anthropic request failed'), {
+      requestId,
+      userId,
       status: anthropicResponse.status,
       detail: errorText,
     })
 
-    return jsonError(502, 'anthropic', 'Anthropic request failed', `status=${anthropicResponse.status} ${errorText}`)
+    return jsonError(502, 'anthropic', 'Request failed. Please try again later.', {
+      code: 'anthropic_error',
+      requestId,
+      detail: shouldExposeDetail(userId) ? sanitizeDetail(`status=${anthropicResponse.status} ${errorText}`) : undefined,
+    })
   }
 
   return new Response(anthropicResponse.body, {
@@ -215,6 +309,7 @@ export async function POST(req: Request): Promise<Response> {
       connection: 'keep-alive',
       'x-comex-schema-ready': String(schemaReadiness.ready),
       'x-comex-agent-mode': schemaReadiness.degraded ? 'degraded' : 'normal',
+      'x-request-id': requestId,
     },
   })
 }

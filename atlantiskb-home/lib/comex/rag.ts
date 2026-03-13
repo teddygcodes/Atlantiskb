@@ -331,11 +331,11 @@ export async function buildRAGContext(question: string, metals: MetalKey[]): Pro
         })
         rows = []
       } else {
-      console.error('[comex-rag] price history retrieval failed', {
-        error,
-        metal,
-      })
-      throw new Error(`Price history retrieval failed for ${metal}: ${getErrorMessage(error)}`)
+        console.error('[comex-rag] price history retrieval failed', {
+          error,
+          metal,
+        })
+        throw new Error(`Price history retrieval failed: metal=${metal}; ${getErrorMessage(error)}`)
       }
     }
 
@@ -365,11 +365,11 @@ export async function buildRAGContext(question: string, metals: MetalKey[]): Pro
         })
         recentLargeEvents = []
       } else {
-      console.error('[comex-rag] large events retrieval failed', {
-        error,
-        metal,
-      })
-      throw new Error(`Large event retrieval failed for ${metal}: ${getErrorMessage(error)}`)
+        console.error('[comex-rag] large events retrieval failed', {
+          error,
+          metal,
+        })
+        throw new Error(`Large event retrieval failed: metal=${metal}; ${getErrorMessage(error)}`)
       }
     }
 
