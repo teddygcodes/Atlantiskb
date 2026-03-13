@@ -82,11 +82,23 @@ export default function AgentPanel({ lastSyncDate }: AgentPanelProps) {
   const [thinkingTick, setThinkingTick] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [supportRequestId, setSupportRequestId] = useState<string | null>(null)
-  const endRef = useRef<HTMLDivElement | null>(null)
+  const messagesContainerRef = useRef<HTMLDivElement | null>(null)
+  const nearBottomRef = useRef(true)
 
-  useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
-  }, [messages])
+  function updateNearBottom() {
+    const container = messagesContainerRef.current
+    if (!container) return
+
+    const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight
+    nearBottomRef.current = distanceFromBottom <= 80
+  }
+
+  function scrollMessagesToBottom() {
+    const container = messagesContainerRef.current
+    if (!container) return
+    container.scrollTop = container.scrollHeight
+    nearBottomRef.current = true
+  }
 
   useEffect(() => {
     if (!isStreaming) return
@@ -128,6 +140,10 @@ export default function AgentPanel({ lastSyncDate }: AgentPanelProps) {
     setSupportRequestId(null)
     setIsStreaming(true)
     setMessages((prev) => [...prev, userMessage, assistantMessage])
+
+    if (nearBottomRef.current) {
+      requestAnimationFrame(scrollMessagesToBottom)
+    }
 
     try {
       const res = await fetch('/comex/api/agent', {
@@ -209,6 +225,7 @@ export default function AgentPanel({ lastSyncDate }: AgentPanelProps) {
             const nextText = parseEventText(dataLine)
             if (!nextText) continue
 
+            const shouldAutoScroll = nearBottomRef.current
             assistantRaw += nextText
             setMessages((prev) =>
               prev.map((msg) =>
@@ -216,10 +233,14 @@ export default function AgentPanel({ lastSyncDate }: AgentPanelProps) {
                   ? {
                       ...msg,
                       content: assistantRaw,
-                    }
+                }
                   : msg,
               ),
             )
+
+            if (shouldAutoScroll) {
+              requestAnimationFrame(scrollMessagesToBottom)
+            }
           }
 
           boundaryIndex = buffer.indexOf('\n\n')
@@ -293,6 +314,8 @@ export default function AgentPanel({ lastSyncDate }: AgentPanelProps) {
       </div>
 
       <div
+        ref={messagesContainerRef}
+        onScroll={updateNearBottom}
         style={{
           border: '1px solid var(--border)',
           borderRadius: 8,
@@ -380,7 +403,6 @@ export default function AgentPanel({ lastSyncDate }: AgentPanelProps) {
               </div>
             )
           })}
-          <div ref={endRef} />
         </div>
       </div>
 
