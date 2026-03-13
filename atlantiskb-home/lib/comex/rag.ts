@@ -73,6 +73,13 @@ export interface RAGContext {
   prices: Record<MetalKey, PriceSummary>
 }
 
+export type RetrievalMode = 'vector' | 'fallback_recent' | 'fallback_global' | 'none'
+
+export interface BuildRAGContextResult {
+  context: RAGContext
+  retrievalMode: RetrievalMode
+}
+
 const FALLBACK_RECENCY_DAYS = 30
 const STOP_WORDS = new Set([
   'about', 'after', 'again', 'against', 'aluminum', 'also', 'among', 'because', 'been', 'before',
@@ -250,7 +257,7 @@ async function fetchFallbackRows(question: string, activeMetals: MetalKey[]): Pr
     })
     .slice(0, 8)
 
-  return prioritized.map((row) => ({
+  const rows = prioritized.map((row) => ({
     id: row.id,
     snippet: row.snippet,
     url: row.url,
@@ -258,6 +265,20 @@ async function fetchFallbackRows(question: string, activeMetals: MetalKey[]): Pr
     publishedAt: row.publishedAt,
     similarity: row.similarity,
   }))
+
+  return rows
+}
+
+function detectFallbackModeFromRows(rows: SimilarityRow[], since: Date): RetrievalMode {
+  if (rows.length === 0) return 'none'
+  return rows.every((row) => row.publishedAt >= since) ? 'fallback_recent' : 'fallback_global'
+}
+
+function isVectorDimensionMismatchError(error: unknown): boolean {
+  const message = getErrorMessage(error).toLowerCase()
+  return message.includes('different vector dimensions')
+    || message.includes('vector dimensions')
+    || message.includes('different dimensions')
 }
 
 async function inspectVectorRetrievalPath(): Promise<VectorRetrievalDiagnostics> {
@@ -302,7 +323,7 @@ async function inspectVectorRetrievalPath(): Promise<VectorRetrievalDiagnostics>
   }
 }
 
-export async function buildRAGContext(question: string, metals: MetalKey[]): Promise<RAGContext> {
+export async function buildRAGContext(question: string, metals: MetalKey[]): Promise<BuildRAGContextResult> {
   const selectedMetals = metals.filter((metal): metal is MetalKey => METAL_KEYS.includes(metal))
   const activeMetals = selectedMetals.length > 0 ? selectedMetals : METAL_KEYS
 
@@ -315,6 +336,7 @@ export async function buildRAGContext(question: string, metals: MetalKey[]): Pro
     totalArticles: 0,
     articlesWithEmbeddings: 0,
   }
+  let retrievalMode: RetrievalMode = 'none'
 
   try {
     vectorDiagnostics = await inspectVectorRetrievalPath()
@@ -371,31 +393,51 @@ export async function buildRAGContext(question: string, metals: MetalKey[]): Pro
       console.info('[comex-rag] vector similarity query completed', {
         similarityResultCount: similarRows.length,
       })
+
+      if (similarRows.length > 0) retrievalMode = 'vector'
     } catch (error) {
-      console.error('[comex-rag] semantic retrieval unavailable; falling back to recency path', {
+      const vectorFallbackReason = isVectorDimensionMismatchError(error)
+        ? 'vector_dimension_mismatch'
+        : 'vector_query_failed'
+
+      console.warn('[comex-rag] semantic retrieval unavailable; falling back to recency path', {
         error,
         questionLength: question.length,
         activeMetals,
+        retrievalMode: 'none',
+        retrievalFallbackReason: vectorFallbackReason,
+        errorClassification: 'retrieval_fallback',
       })
     }
   } else {
     console.warn('[comex-rag] vector retrieval prerequisites not met; skipping semantic query', {
       hasVoyageApiKey,
       vectorDiagnostics,
+      retrievalMode: 'none',
     })
   }
 
   if (similarRows.length === 0) {
     try {
       similarRows = await fetchFallbackRows(question, activeMetals)
+      retrievalMode = detectFallbackModeFromRows(similarRows, subDays(new Date(), FALLBACK_RECENCY_DAYS))
     } catch (error) {
       console.error('[comex-rag] fallback retrieval query failed', {
         error,
         activeMetals,
+        retrievalMode: 'none',
+        errorClassification: 'retrieval_fallback',
       })
       similarRows = []
+      retrievalMode = 'none'
     }
   }
+
+  console.info('[comex-rag] retrieval mode outcome', {
+    retrievalMode,
+    similarityResultCount: similarRows.length,
+    activeMetals,
+  })
 
   const articles = await buildRetrievedArticles(similarRows, activeMetals)
 
@@ -480,8 +522,11 @@ export async function buildRAGContext(question: string, metals: MetalKey[]): Pro
   }
 
   return {
-    question,
-    articles,
-    prices,
+    context: {
+      question,
+      articles,
+      prices,
+    },
+    retrievalMode,
   }
 }
