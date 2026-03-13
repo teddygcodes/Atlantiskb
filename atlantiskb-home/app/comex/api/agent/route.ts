@@ -74,12 +74,18 @@ function logStageError(stage: SetupStage, error: unknown, extras?: Record<string
   })
 }
 
-function getRuntimeConfig(): { anthropicApiKey: string; hasDatabaseUrl: boolean; hasDirectUrl: boolean } {
+function getRuntimeConfig(): {
+  anthropicApiKey: string
+  hasVoyageApiKey: boolean
+  hasDatabaseUrl: boolean
+  hasDirectUrl: boolean
+} {
   const anthropicApiKey = process.env.ANTHROPIC_API_KEY ?? ''
+  const hasVoyageApiKey = Boolean(process.env.VOYAGE_API_KEY)
   const hasDatabaseUrl = Boolean(process.env.DATABASE_URL)
   const hasDirectUrl = Boolean(process.env.DIRECT_URL)
 
-  return { anthropicApiKey, hasDatabaseUrl, hasDirectUrl }
+  return { anthropicApiKey, hasVoyageApiKey, hasDatabaseUrl, hasDirectUrl }
 }
 
 export async function POST(req: Request): Promise<Response> {
@@ -109,10 +115,15 @@ export async function POST(req: Request): Promise<Response> {
     return jsonError(400, 'validation', 'Question is required')
   }
 
-  const { anthropicApiKey, hasDatabaseUrl, hasDirectUrl } = getRuntimeConfig()
+  const { anthropicApiKey, hasVoyageApiKey, hasDatabaseUrl, hasDirectUrl } = getRuntimeConfig()
   if (!anthropicApiKey) {
     logStageError('config', new Error('ANTHROPIC_API_KEY is missing'))
     return jsonError(500, 'config', 'ANTHROPIC_API_KEY is not configured')
+  }
+
+  if (!hasVoyageApiKey) {
+    logStageError('config', new Error('VOYAGE_API_KEY is missing'))
+    return jsonError(500, 'config', 'VOYAGE_API_KEY is not configured')
   }
 
   if (!hasDatabaseUrl && !hasDirectUrl) {
