@@ -15,6 +15,7 @@ import type { DailyPrice } from '@/lib/comex/fetch-prices'
 import type { MAPoint } from '@/lib/comex/moving-average'
 import type { Prediction } from '@/lib/comex/predictions'
 import { METAL_CONFIG, METAL_KEYS, type MetalKey } from '@/lib/comex/constants'
+import AgentPanel from './components/AgentPanel'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -76,11 +77,6 @@ function formatDate(iso: string): string {
     month: 'short',
     day: 'numeric',
   })
-}
-
-function lastSyncedLabel(history: DailyPrice[]): string {
-  if (!history.length) return '—'
-  return formatDate(history[history.length - 1].date)
 }
 
 // ── Sub-components ────────────────────────────────────────────────────────────
@@ -366,10 +362,15 @@ export default function ComexPage() {
   // Determine if we have any data
   const hasData = data && METAL_KEYS.some((k) => (data[k]?.history?.length ?? 0) > 0)
 
-  // Last synced label
-  const lastSynced = hasData
-    ? lastSyncedLabel(data[METAL_KEYS.find((k) => (data[k]?.history?.length ?? 0) > 0)!]!.history)
+  const newestHistoryDate = hasData
+    ? METAL_KEYS
+        .flatMap((k) => data?.[k]?.history?.map((point) => point.date) ?? [])
+        .sort((a, b) => b.localeCompare(a))[0] ?? null
     : null
+
+  // Last synced label
+  const lastSynced = newestHistoryDate ? formatDate(newestHistoryDate) : null
+  const lastSyncDate = newestHistoryDate ? formatDate(newestHistoryDate) : '—'
 
   return (
     <div>
@@ -432,12 +433,17 @@ export default function ComexPage() {
       )}
 
       {!loading && !error && hasData && (
-        <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap' }}>
-          {METAL_KEYS.map((metalKey) => {
-            const metalData = data?.[metalKey]
-            if (!metalData || metalData.history.length === 0) return null
-            return <MetalCard key={metalKey} metalKey={metalKey} data={metalData} />
-          })}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 20, alignItems: 'start' }}>
+          <div style={{ gridColumn: 'span 2', display: 'flex', gap: 20, flexWrap: 'wrap' }}>
+            {METAL_KEYS.map((metalKey) => {
+              const metalData = data?.[metalKey]
+              if (!metalData || metalData.history.length === 0) return null
+              return <MetalCard key={metalKey} metalKey={metalKey} data={metalData} />
+            })}
+          </div>
+          <div style={{ gridColumn: 'span 1' }}>
+            <AgentPanel lastSyncDate={lastSyncDate} />
+          </div>
         </div>
       )}
     </div>
