@@ -13,6 +13,25 @@ interface Message {
   sources: string[]
 }
 
+interface NewsSyncSourceResult {
+  source: string
+  fetched: number
+  relevant: number
+  inserted: number
+  skipped: number
+  errored: number
+  errors?: string[]
+}
+
+interface NewsSyncResponse {
+  ok: boolean
+  message?: string
+  totals?: {
+    inserted?: number
+  }
+  results?: NewsSyncSourceResult[]
+}
+
 const STARTER_CHIPS = [
   'What moved copper prices this week?',
   'Summarize the latest aluminum outlook.',
@@ -152,6 +171,9 @@ export default function AgentPanel({ lastSyncDate }: AgentPanelProps) {
   const [thinkingTick, setThinkingTick] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [supportRequestId, setSupportRequestId] = useState<string | null>(null)
+  const [isNewsSyncing, setIsNewsSyncing] = useState(false)
+  const [newsSyncError, setNewsSyncError] = useState<string | null>(null)
+  const [newsSyncResult, setNewsSyncResult] = useState<NewsSyncResponse | null>(null)
   const messagesContainerRef = useRef<HTMLDivElement | null>(null)
   const nearBottomRef = useRef(true)
   const flushTimeoutRef = useRef<number | null>(null)
@@ -402,6 +424,35 @@ export default function AgentPanel({ lastSyncDate }: AgentPanelProps) {
     void sendPrompt(input)
   }
 
+  async function handleNewsSync() {
+    if (isNewsSyncing) return
+
+    setIsNewsSyncing(true)
+    setNewsSyncError(null)
+
+    try {
+      const res = await fetch('/comex/api/news/sync')
+      const json = (await res.json()) as NewsSyncResponse
+
+      if (!res.ok) {
+        throw new Error(json.message ?? 'News sync request failed')
+      }
+
+      setNewsSyncResult(json)
+    } catch (syncError) {
+      setNewsSyncError(syncError instanceof Error ? syncError.message : 'News sync failed')
+    } finally {
+      setIsNewsSyncing(false)
+    }
+  }
+
+  const sourceErrors = (newsSyncResult?.results ?? [])
+    .filter((result) => (result.errors ?? []).length > 0)
+    .map((result) => ({
+      source: result.source,
+      errors: result.errors ?? [],
+    }))
+
   return (
     <section
       style={{
@@ -412,12 +463,94 @@ export default function AgentPanel({ lastSyncDate }: AgentPanelProps) {
         padding: 22,
       }}
     >
-      <div style={{ marginBottom: 10 }}>
-        <h2 style={{ margin: 0, fontSize: 18, color: 'var(--text-primary)' }}>COMEX Agent</h2>
-        <p style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--text-muted)' }}>
-          Last synced settlement data: {lastSyncDate}
-        </p>
+      <div style={{ marginBottom: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
+        <div>
+          <h2 style={{ margin: 0, fontSize: 18, color: 'var(--text-primary)' }}>COMEX Agent</h2>
+          <p style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--text-muted)' }}>
+            Last synced settlement data: {lastSyncDate}
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => void handleNewsSync()}
+          disabled={isNewsSyncing}
+          style={{
+            border: 'none',
+            borderRadius: 6,
+            background: isNewsSyncing ? 'var(--text-muted)' : 'var(--accent)',
+            color: '#fff',
+            padding: '7px 12px',
+            fontSize: 12,
+            fontWeight: 600,
+            cursor: isNewsSyncing ? 'not-allowed' : 'pointer',
+            transition: 'background 0.15s',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {isNewsSyncing ? 'Syncing News…' : 'Sync News'}
+        </button>
       </div>
+
+      {isNewsSyncing && (
+        <p style={{ margin: '0 0 10px', fontSize: 11, color: 'var(--text-secondary)' }}>
+          Running news/article ingestion sync…
+        </p>
+      )}
+
+      {newsSyncError && (
+        <p style={{ margin: '0 0 10px', fontSize: 11, color: 'var(--accent)' }}>
+          News sync error: {newsSyncError}
+        </p>
+      )}
+
+      {newsSyncResult && (
+        <div
+          style={{
+            marginBottom: 10,
+            border: '1px solid var(--border)',
+            borderRadius: 8,
+            background: 'var(--bg)',
+            padding: '8px 10px',
+            fontSize: 11,
+            color: 'var(--text-secondary)',
+          }}
+        >
+          <div style={{ marginBottom: 4 }}>
+            <strong style={{ color: 'var(--text-primary)' }}>Status:</strong>{' '}
+            {newsSyncResult.ok ? 'sync_completed' : newsSyncResult.message ?? 'sync_failed'}
+            {' · '}
+            <strong style={{ color: 'var(--text-primary)' }}>totals.inserted:</strong>{' '}
+            {newsSyncResult.totals?.inserted ?? 0}
+          </div>
+
+          {(newsSyncResult.results ?? []).length > 0 && (
+            <div style={{ display: 'grid', gap: 3 }}>
+              {newsSyncResult.results?.map((result) => (
+                <div key={result.source}>
+                  <strong style={{ color: 'var(--text-primary)' }}>{result.source}:</strong> fetched {result.fetched} · relevant{' '}
+                  {result.relevant} · inserted {result.inserted} · skipped {result.skipped} · errored {result.errored}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {sourceErrors.length > 0 && (
+            <div style={{ marginTop: 6 }}>
+              <strong style={{ color: 'var(--text-primary)' }}>Source errors:</strong>
+              <ul style={{ margin: '4px 0 0', paddingLeft: 16 }}>
+                {sourceErrors.flatMap((source) =>
+                  source.errors.map((message, index) => (
+                    <li key={`${source.source}-${index}`}>
+                      {source.source}: {message}
+                    </li>
+                  )),
+                )}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
 
       <div
         ref={messagesContainerRef}
