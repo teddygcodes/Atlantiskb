@@ -20,6 +20,16 @@ interface PriceEventRow {
   magnitude: 'medium' | 'large'
 }
 
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message
+  return String(error)
+}
+
+function isMissingRelationError(error: unknown, relation: string): boolean {
+  const message = getErrorMessage(error)
+  return message.includes(`relation "${relation}" does not exist`)
+}
+
 export interface RetrievedArticle {
   id: string
   snippet: string
@@ -108,11 +118,26 @@ async function fetchRelatedEvents(activeMetals: MetalKey[], articleDate: Date, a
       ORDER BY "date" DESC
     `)
   } catch (error) {
+ codex/remove-hard-return-for-voyage_api_key-qwrcg8
     console.error('[comex-rag] related events retrieval failed', {
+=======
+    if (isMissingRelationError(error, 'NewsArticle')) {
+      console.warn('[comex-rag] NewsArticle relation is missing. Returning empty article context.', {
+        activeMetals,
+      })
+      similarRows = []
+    } else {
+    console.error('[comex-rag] vector retrieval query failed', {
+  main
       error,
       articleId,
     })
+ codex/remove-hard-return-for-voyage_api_key-qwrcg8
     throw new Error(`Related price event retrieval failed: ${error instanceof Error ? error.message : String(error)}`)
+=======
+    throw new Error(`Vector retrieval failed: ${getErrorMessage(error)}`)
+    }
+ main
   }
 }
 
@@ -120,7 +145,42 @@ async function buildRetrievedArticles(similarRows: SimilarityRow[], activeMetals
   const articles: RetrievedArticle[] = []
 
   for (const row of similarRows) {
+ codex/remove-hard-return-for-voyage_api_key-qwrcg8
     const relatedEvents = await fetchRelatedEvents(activeMetals, row.publishedAt, row.id)
+=======
+    const windowStart = subDays(row.publishedAt, 3)
+    const windowEnd = new Date(row.publishedAt)
+    windowEnd.setDate(windowEnd.getDate() + 3)
+
+    let relatedEvents: PriceEventRow[]
+    try {
+      relatedEvents = await db.$queryRaw<PriceEventRow[]>(Prisma.sql`
+        SELECT
+          "id",
+          "metal",
+          "date",
+          "direction",
+          "magnitude"
+        FROM "PriceEvent"
+        WHERE "metal" IN (${Prisma.join(activeMetals)})
+          AND "date" BETWEEN ${windowStart} AND ${windowEnd}
+        ORDER BY "date" DESC
+      `)
+    } catch (error) {
+      if (isMissingRelationError(error, 'PriceEvent')) {
+        console.warn('[comex-rag] PriceEvent relation is missing. Returning article without related events.', {
+          articleId: row.id,
+        })
+        relatedEvents = []
+      } else {
+      console.error('[comex-rag] related events retrieval failed', {
+        error,
+        articleId: row.id,
+      })
+      throw new Error(`Related price event retrieval failed: ${getErrorMessage(error)}`)
+      }
+    }
+main
 
     articles.push({
       id: row.id,
@@ -276,11 +336,18 @@ export async function buildRAGContext(question: string, metals: MetalKey[]): Pro
         },
       })
     } catch (error) {
+      if (isMissingRelationError(error, 'CommodityPrice')) {
+        console.warn('[comex-rag] CommodityPrice relation is missing. Returning null price summary.', {
+          metal,
+        })
+        rows = []
+      } else {
       console.error('[comex-rag] price history retrieval failed', {
         error,
         metal,
       })
-      throw new Error(`Price history retrieval failed for ${metal}: ${error instanceof Error ? error.message : String(error)}`)
+      throw new Error(`Price history retrieval failed for ${metal}: ${getErrorMessage(error)}`)
+      }
     }
 
     const current = rows.at(-1)?.close ?? null
@@ -303,11 +370,18 @@ export async function buildRAGContext(question: string, metals: MetalKey[]): Pro
         LIMIT 5
       `)
     } catch (error) {
+      if (isMissingRelationError(error, 'PriceEvent')) {
+        console.warn('[comex-rag] PriceEvent relation is missing. Returning no large events.', {
+          metal,
+        })
+        recentLargeEvents = []
+      } else {
       console.error('[comex-rag] large events retrieval failed', {
         error,
         metal,
       })
-      throw new Error(`Large event retrieval failed for ${metal}: ${error instanceof Error ? error.message : String(error)}`)
+      throw new Error(`Large event retrieval failed for ${metal}: ${getErrorMessage(error)}`)
+      }
     }
 
     prices[metal] = {
