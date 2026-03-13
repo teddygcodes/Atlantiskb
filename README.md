@@ -94,6 +94,29 @@ npm run lint    # ESLint
 
 ---
 
+## COMEX setup (pgvector + Prisma)
+
+When enabling COMEX semantic search, run these steps in this exact order:
+
+1. Enable `pgvector` **before** Prisma migrations:
+
+   ```sql
+   CREATE EXTENSION IF NOT EXISTS vector;
+   ```
+
+2. Run the Prisma migration.
+
+3. Execute the SQL below:
+
+   ```sql
+   ALTER TABLE "NewsArticle" ADD COLUMN IF NOT EXISTS embedding vector(512);
+   CREATE INDEX ON "NewsArticle" USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
+   ```
+
+> **Important:** Voyage model embeddings are **512 dimensions**, so the database column must be `vector(512)` to match.
+
+---
+
 ## Design system
 
 The UI follows a Microsoft Fluent-inspired aesthetic: utilitarian, white-surface, red accent. Key rules:
