@@ -8,20 +8,22 @@ export type NewsSource = {
 
 export const NEWS_SOURCES: NewsSource[] = [
   {
-    name: 'Kitco',
-    url: 'https://www.kitco.com/news',
-    rssUrl: 'https://www.kitco.com/rss/news'
+    name: 'Google News - COMEX Copper Futures',
+    url: 'https://news.google.com/search?q=COMEX+copper+futures',
+    rssUrl:
+      'https://news.google.com/rss/search?q=COMEX+copper+futures&hl=en-US&gl=US&ceid=US:en'
   },
   {
-    name: 'Mining.com',
-    url: 'https://www.mining.com',
-    rssUrl: 'https://www.mining.com/feed/'
+    name: 'Google News - Aluminum Market',
+    url: 'https://news.google.com/search?q=aluminum+market+supply+demand',
+    rssUrl:
+      'https://news.google.com/rss/search?q=aluminum+market+supply+demand&hl=en-US&gl=US&ceid=US:en'
   },
   {
-    // Provisional source entry pending URL/feed verification in final spec.
-    name: 'Reuters Business',
-    url: 'https://www.reuters.com/business/',
-    rssUrl: 'https://www.reutersagency.com/feed/?best-topics=business-finance&post_type=best'
+    name: 'Google News - Copper Mining & Smelter',
+    url: 'https://news.google.com/search?q=copper+mine+smelter+refinery',
+    rssUrl:
+      'https://news.google.com/rss/search?q=copper+mine+smelter+refinery&hl=en-US&gl=US&ceid=US:en'
   }
 ]
 
@@ -63,5 +65,3 @@ export function inferMetal(text: string): NewsMetal {
 
   return 'both'
 }
-
-// TODO(spec): Verify Reuters Business URL and fallback URL guidance exactly as the final spec indicates.
