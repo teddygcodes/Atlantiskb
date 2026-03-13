@@ -6,6 +6,9 @@ export interface ComexSchemaReadiness {
   ready: boolean
   degraded: boolean
   remediation: string
+  embeddingDimension: number | null
+  expectedEmbeddingDimension: number
+  embeddingDimensionMatches: boolean
   required: {
     newsArticleTable: boolean
     priceEventTable: boolean
@@ -19,6 +22,7 @@ export interface ComexSchemaReadiness {
 }
 
 const REMEDIATION = 'run prisma migrate deploy'
+const EXPECTED_EMBEDDING_DIMENSION = 512
 let lastLoggedFingerprint = ''
 
 function buildReadinessFromChecks(checks: {
@@ -27,7 +31,11 @@ function buildReadinessFromChecks(checks: {
   hasCommodityPriceTable: boolean
   hasEmbeddingColumn: boolean
   hasVectorExtension: boolean
+  embeddingDimension: number | null
 }): ComexSchemaReadiness {
+  const embeddingDimension = toNullableNumber(checks.embeddingDimension)
+  const embeddingDimensionMatches = embeddingDimension === EXPECTED_EMBEDDING_DIMENSION
+
   const required = {
     newsArticleTable: toBool(checks.hasNewsArticleTable),
     priceEventTable: toBool(checks.hasPriceEventTable),
@@ -37,7 +45,8 @@ function buildReadinessFromChecks(checks: {
   const optional = {
     embeddingColumn: toBool(checks.hasEmbeddingColumn),
     vectorExtension: toBool(checks.hasVectorExtension),
-    vectorSearchReady: toBool(checks.hasEmbeddingColumn) && toBool(checks.hasVectorExtension),
+    vectorSearchReady:
+      toBool(checks.hasEmbeddingColumn) && toBool(checks.hasVectorExtension) && embeddingDimensionMatches,
   }
 
   const ready = required.newsArticleTable && required.priceEventTable && required.commodityPriceTable
@@ -47,6 +56,9 @@ function buildReadinessFromChecks(checks: {
     ready,
     degraded: !ready,
     remediation: REMEDIATION,
+    embeddingDimension,
+    expectedEmbeddingDimension: EXPECTED_EMBEDDING_DIMENSION,
+    embeddingDimensionMatches,
     required,
     optional,
   }
@@ -54,6 +66,14 @@ function buildReadinessFromChecks(checks: {
 
 function toBool(value: unknown): boolean {
   return value === true
+}
+
+function toNullableNumber(value: unknown): number | null {
+  if (typeof value !== 'number' || Number.isNaN(value) || value <= 0) {
+    return null
+  }
+
+  return value
 }
 
 function logOperationalSchemaErrorOnce(readiness: ComexSchemaReadiness): void {
@@ -84,6 +104,7 @@ export async function getComexSchemaReadiness(): Promise<ComexSchemaReadiness> {
         hasCommodityPriceTable: boolean
         hasEmbeddingColumn: boolean
         hasVectorExtension: boolean
+        embeddingDimension: number | null
       }>
     >(Prisma.sql`
     SELECT
@@ -116,7 +137,20 @@ export async function getComexSchemaReadiness(): Promise<ComexSchemaReadiness> {
         SELECT 1
         FROM pg_extension
         WHERE extname = 'vector'
-      ) AS "hasVectorExtension"
+      ) AS "hasVectorExtension",
+      (
+        SELECT NULLIF(att.atttypmod, -1) - 4
+        FROM pg_catalog.pg_attribute att
+        INNER JOIN pg_catalog.pg_class cls
+          ON cls.oid = att.attrelid
+        INNER JOIN pg_catalog.pg_namespace ns
+          ON ns.oid = cls.relnamespace
+        WHERE ns.nspname = 'public'
+          AND cls.relname = 'NewsArticle'
+          AND att.attname = 'embedding'
+          AND att.attnum > 0
+          AND NOT att.attisdropped
+      ) AS "embeddingDimension"
   `)
 
     const row = checks[0]
@@ -127,6 +161,7 @@ export async function getComexSchemaReadiness(): Promise<ComexSchemaReadiness> {
       hasCommodityPriceTable: toBool(row?.hasCommodityPriceTable),
       hasEmbeddingColumn: toBool(row?.hasEmbeddingColumn),
       hasVectorExtension: toBool(row?.hasVectorExtension),
+      embeddingDimension: toNullableNumber(row?.embeddingDimension),
     })
 
     logOperationalSchemaErrorOnce(readiness)
@@ -139,6 +174,7 @@ export async function getComexSchemaReadiness(): Promise<ComexSchemaReadiness> {
       hasCommodityPriceTable: false,
       hasEmbeddingColumn: false,
       hasVectorExtension: false,
+      embeddingDimension: null,
     })
 
     console.error('[comex-schema] Failed to verify COMEX schema readiness. Agent is running in degraded mode. Remediation: run prisma migrate deploy', {

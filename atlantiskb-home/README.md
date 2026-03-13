@@ -207,6 +207,13 @@ npx prisma migrate dev
 ### COMEX agent schema readiness
 The COMEX agent runs in normal mode only when all required COMEX tables exist: `CommodityPrice`, `NewsArticle`, and `PriceEvent`. If any required table is missing, schema readiness reports degraded mode and the agent falls back to a degraded response path until migrations are applied (`npx prisma migrate deploy`).
 
+The `/comex/api/health/schema` readiness payload also reports vector configuration details for `NewsArticle.embedding`:
+- `embeddingDimension`: configured dimension detected from Postgres metadata (`null` when unavailable)
+- `expectedEmbeddingDimension`: model expectation (currently `512`)
+- `embeddingDimensionMatches`: whether configured and expected dimensions match
+
+`optional.vectorSearchReady` is `true` only when the embedding column exists, the `vector` extension is installed, and the configured embedding dimension matches the expected model dimension.
+
 ### pgvector note for COMEX RAG
 The COMEX semantic retrieval path expects a `vector` extension and `NewsArticle.embedding` vector column. Confirm your database has the extension/column/index expected by migrations and raw SQL inserts before enabling news embedding sync in non-dev environments.
 
