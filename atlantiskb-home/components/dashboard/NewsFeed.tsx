@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { ExternalLink, Newspaper } from 'lucide-react'
-import type { NewsArticle } from '@/app/api/dashboard/news/route'
+import type { NewsArticle } from '@/app/leads/api/dashboard/news/route'
 
 type Category = 'All' | 'Industrial' | 'Commercial' | 'Infrastructure' | 'Economic Development'
 
