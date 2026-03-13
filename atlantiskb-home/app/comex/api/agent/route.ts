@@ -122,8 +122,7 @@ export async function POST(req: Request): Promise<Response> {
   }
 
   if (!hasVoyageApiKey) {
-    logStageError('config', new Error('VOYAGE_API_KEY is missing'))
-    return jsonError(500, 'config', 'VOYAGE_API_KEY is not configured')
+    logStageError('config', new Error('VOYAGE_API_KEY is missing; semantic retrieval will be skipped'))
   }
 
   if (!hasDatabaseUrl && !hasDirectUrl) {
