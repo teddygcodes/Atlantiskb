@@ -2,6 +2,7 @@ import { Prisma } from '@prisma/client'
 import { db } from '@/lib/db'
 import { embedText } from '@/lib/comex/embeddings'
 import { METAL_KEYS, type MetalKey } from '@/lib/comex/constants'
+import { DRIVER_TERMS } from '@/lib/comex/news-sources'
 
 interface SimilarityRow {
   id: string
@@ -85,10 +86,11 @@ export interface BuildRAGContextResult {
 }
 
 const FALLBACK_RECENCY_DAYS = 30
+// Commodity terms intentionally excluded so they count as keyword hits in fallback scoring
 const STOP_WORDS = new Set([
-  'about', 'after', 'again', 'against', 'aluminum', 'also', 'among', 'because', 'been', 'before',
-  'between', 'comex', 'could', 'copper', 'does', 'from', 'have', 'into', 'just', 'market', 'metal',
-  'more', 'news', 'price', 'prices', 'should', 'their', 'there', 'these', 'this', 'those', 'under',
+  'about', 'after', 'again', 'against', 'also', 'among', 'because', 'been', 'before',
+  'between', 'could', 'does', 'from', 'have', 'into', 'just',
+  'more', 'should', 'their', 'there', 'these', 'this', 'those', 'under',
   'what', 'when', 'where', 'which', 'while', 'would',
 ])
 
@@ -251,21 +253,27 @@ async function fetchFallbackRows(question: string, activeMetals: MetalKey[]): Pr
   }
 
   const scored = candidateRows.map((row) => {
-    const snippet = row.snippet.toLowerCase()
-    const keywordHits = keywords.filter((term) => snippet.includes(term)).length
+    const text = `${row.headline} ${row.snippet}`.toLowerCase()
+    const keywordHits = keywords.filter((term) => text.includes(term)).length
+    const driverHits = DRIVER_TERMS.filter(t => text.includes(t)).length
+    const recency = recencyScore(row.publishedAt)
+    const base =
+      keywordHits > 0 ? 0.45 + Math.min(keywordHits, 5) * 0.08
+      : driverHits > 0 ? 0.35 + Math.min(driverHits, 4) * 0.05
+      : 0.20
     return {
       ...row,
       keywordHits,
-      similarity: keywordHits > 0 ? 0.45 + Math.min(keywordHits, 5) * 0.1 : 0.3,
+      similarity: base * (0.7 + recency * 0.3),
     }
   })
 
   const prioritized = scored
     .sort((a, b) => {
-      if (b.keywordHits !== a.keywordHits) return b.keywordHits - a.keywordHits
-      return b.publishedAt.getTime() - a.publishedAt.getTime()
+      if (b.similarity !== a.similarity) return b.similarity - a.similarity
+      return b.keywordHits - a.keywordHits
     })
-    .slice(0, 8)
+    .slice(0, 6)
 
   const rows = prioritized.map((row) => ({
     id: row.id,
@@ -335,6 +343,30 @@ async function inspectVectorRetrievalPath(): Promise<VectorRetrievalDiagnostics>
   }
 }
 
+function driverTermScore(text: string): number {
+  const lower = text.toLowerCase()
+  const hits = DRIVER_TERMS.filter(t => lower.includes(t)).length
+  return Math.min(hits / 4, 1.0) // normalize 0–1, saturates at 4 hits
+}
+
+function recencyScore(publishedAt: Date): number {
+  const ageDays = (Date.now() - publishedAt.getTime()) / (1000 * 60 * 60 * 24)
+  return Math.exp(-ageDays / 14) // half-life ~10 days
+}
+
+function computeCompositeScore(
+  rawSimilarity: number,
+  publishedAt: Date,
+  text: string,
+  activeMetals: MetalKey[],
+  metal: string,
+): number {
+  const directMetalBoost = activeMetals.includes(metal as MetalKey) ? 1.0 : 0.9
+  const driver = driverTermScore(text)
+  const recency = recencyScore(publishedAt)
+  return (rawSimilarity * 0.60 + recency * 0.25 + driver * 0.15) * directMetalBoost
+}
+
 export async function buildRAGContext(question: string, metals: MetalKey[]): Promise<BuildRAGContextResult> {
   const selectedMetals = metals.filter((metal): metal is MetalKey => METAL_KEYS.includes(metal))
   const activeMetals = selectedMetals.length > 0 ? selectedMetals : METAL_KEYS
@@ -399,16 +431,45 @@ export async function buildRAGContext(question: string, metals: MetalKey[]): Pro
         FROM "NewsArticle"
         WHERE "embedding" IS NOT NULL
           AND "metal" IN (${metalFilter})
-          AND 1 - ("embedding" <=> ${vectorLiteral}::vector) >= 0.60
+          AND 1 - ("embedding" <=> ${vectorLiteral}::vector) >= 0.50
         ORDER BY "similarity" DESC
-        LIMIT 8
+        LIMIT 20
       `)
 
       console.info('[comex-rag] vector similarity query completed', {
         similarityResultCount: similarRows.length,
       })
 
-      if (similarRows.length > 0) retrievalMode = 'vector'
+      if (similarRows.length > 0) {
+        const reranked = similarRows
+          .map(row => ({
+            ...row,
+            rawSimilarity: row.similarity,
+            similarity: computeCompositeScore(
+              row.similarity,
+              row.publishedAt,
+              `${row.headline} ${row.snippet}`,
+              activeMetals,
+              row.metal,
+            ),
+          }))
+          .sort((a, b) => b.similarity - a.similarity)
+          .slice(0, 6)
+
+        console.info('[comex-rag] reranked top candidates', {
+          totalCandidates: similarRows.length,
+          returned: reranked.length,
+          topScores: reranked.map(r => ({
+            rawSimilarity: r.rawSimilarity,
+            compositeScore: r.similarity,
+            publishedAt: r.publishedAt,
+            source: r.source,
+          })),
+        })
+
+        similarRows = reranked
+        retrievalMode = 'vector'
+      }
     } catch (error) {
       const vectorFallbackReason = isVectorDimensionMismatchError(error)
         ? 'vector_dimension_mismatch'

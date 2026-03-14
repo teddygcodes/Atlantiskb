@@ -84,9 +84,18 @@ function stripHtml(text: string): string {
     .trim();
 }
 
+const SNIPPET_BOILERPLATE =
+  /\b(read more|full story|read the full|more at|sign up|subscribe|newsletter|click here|follow us)\b.*/gi
+
 function toSnippet(title: string, content: string): string {
-  const combined = `${title} ${content}`.trim();
-  return stripHtml(combined).slice(0, 500);
+  const cleaned = stripHtml(content)
+    .replace(SNIPPET_BOILERPLATE, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+  // Avoid prepending title if content already starts with it
+  const startsWithTitle = cleaned.toLowerCase().startsWith(title.toLowerCase().slice(0, 40))
+  const text = startsWithTitle ? cleaned : `${title} ${cleaned}`
+  return text.slice(0, 500).trim()
 }
 
 function createCuid(seed: string): string {
