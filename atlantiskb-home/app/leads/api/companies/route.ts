@@ -5,6 +5,7 @@ import { CompanyFiltersSchema, CompanyCreateSchema } from '@/lib/validation/sche
 import { normalizeName, extractDomain } from '@/lib/normalization'
 import { buildPaginatedResponse } from '@/lib/pagination'
 import { Prisma } from '@prisma/client'
+import { decrypt, encrypt, hmacToken } from '@/lib/crypto'
 
 export async function GET(req: NextRequest) {
   const { userId } = await auth()
@@ -92,7 +93,12 @@ export async function GET(req: NextRequest) {
     db.company.count({ where }),
   ])
 
-  return NextResponse.json(buildPaginatedResponse(companies, total, page, limit))
+  const decrypted = companies.map((c) => ({
+    ...c,
+    phone: decrypt(c.phone),
+    email: decrypt(c.email),
+  }))
+  return NextResponse.json(buildPaginatedResponse(decrypted, total, page, limit))
 }
 
 export async function POST(req: NextRequest) {
@@ -111,7 +117,8 @@ export async function POST(req: NextRequest) {
     name,
     normalizedName: normalizeName(name),
     county: county ?? null,
-    phone: phone ?? null,
+    phone: phone ? encrypt(phone) : null,
+    phoneHmac: phone ? hmacToken(phone) : null,
     website: website ?? null,
     domain: website ? extractDomain(website) : null,
     state: 'GA',

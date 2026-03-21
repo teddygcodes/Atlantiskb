@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { Prisma } from '@prisma/client'
 import { normalizePhone, normalizeName } from '@/lib/normalization'
+import { hmacToken } from '@/lib/crypto'
 
 export async function GET(req: Request) {
   const { userId } = await auth()
@@ -30,14 +31,18 @@ export async function GET(req: Request) {
   }
 
   try {
+    // Build HMAC tokens for phone lookup (encrypted phones are not queryable directly)
+    const phoneHmacs = phones.map((p) => hmacToken(p)).filter((h): h is string => Boolean(h))
+    const hmacToPhone = new Map(phones.map((p) => [hmacToken(p), p]))
+
     const orClauses: Prisma.CompanyWhereInput[] = []
-    if (phones.length > 0) orClauses.push({ phone: { in: phones } })
+    if (phoneHmacs.length > 0) orClauses.push({ phoneHmac: { in: phoneHmacs } })
     if (names.length > 0) orClauses.push({ normalizedName: { in: names } })
     if (placeIds.length > 0) orClauses.push({ googlePlaceId: { in: placeIds } })
 
     const matches = await db.company.findMany({
       where: { OR: orClauses },
-      select: { id: true, name: true, phone: true, normalizedName: true, recordOrigin: true, activeJobCount: true, lastPermitAt: true, googlePlaceId: true },
+      select: { id: true, name: true, phoneHmac: true, normalizedName: true, recordOrigin: true, activeJobCount: true, lastPermitAt: true, googlePlaceId: true },
     })
 
     const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1_000)
@@ -52,7 +57,10 @@ export async function GET(req: Request) {
         c.activeJobCount > 0 ||
         (c.lastPermitAt != null && c.lastPermitAt > thirtyDaysAgo)
       const entry: MatchEntry = { companyId: c.id, companyName: c.name, recordOrigin: c.recordOrigin, hasActivePermit }
-      if (c.phone && phones.includes(c.phone)) byPhone[c.phone] = entry
+      if (c.phoneHmac) {
+        const originalPhone = hmacToPhone.get(c.phoneHmac)
+        if (originalPhone) byPhone[originalPhone] = entry
+      }
       if (c.normalizedName && names.includes(c.normalizedName)) byName[c.normalizedName] = entry
       if (c.googlePlaceId && placeIds.includes(c.googlePlaceId)) byPlaceId[c.googlePlaceId] = entry
     }

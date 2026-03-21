@@ -13,7 +13,7 @@ export const PaginationSchema = z.object({
 
 // ---- Company list filters ----
 export const CompanyFiltersSchema = z.object({
-  search: z.string().optional(),
+  search: z.string().max(200).optional(),
   county: z.string().optional(),
   segment: z.string().optional(),
   status: z
@@ -52,16 +52,16 @@ export const JobFiltersSchema = z.object({
 
 // ---- CSV import commit ----
 export const ImportRowSchema = z.object({
-  name: z.string().min(1, 'Company name required'),
-  website: z.string().url().optional().or(z.literal('')),
-  domain: z.string().optional(),
-  phone: z.string().optional(),
-  email: z.string().email().optional().or(z.literal('')),
-  street: z.string().optional(),
-  city: z.string().optional(),
-  state: z.string().optional(),
-  zip: z.string().optional(),
-  county: z.string().optional(),
+  name: z.string().min(1, 'Company name required').max(200),
+  website: z.string().url().max(500).optional().or(z.literal('')),
+  domain: z.string().max(253).optional(),
+  phone: z.string().max(30).optional(),
+  email: z.string().email().max(254).optional().or(z.literal('')),
+  street: z.string().max(300).optional(),
+  city: z.string().max(100).optional(),
+  state: z.string().max(50).optional(),
+  zip: z.string().max(20).optional(),
+  county: z.string().max(100).optional(),
 })
 
 export type ImportRow = z.infer<typeof ImportRowSchema>

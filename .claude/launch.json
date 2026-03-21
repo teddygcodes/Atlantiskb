@@ -1,0 +1,13 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "atlantiskb-home",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "port": 3000,
+      "autoPort": true,
+      "cwd": "/Users/tylergilstrap/Desktop/Electrical Atlantis/atlantiskb-home"
+    }
+  ]
+}

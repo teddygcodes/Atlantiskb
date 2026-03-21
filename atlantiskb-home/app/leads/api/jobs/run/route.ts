@@ -27,12 +27,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
 import { runJob } from '@/lib/jobs/runner'
 import { RunJobSchema } from '@/lib/validation/schemas'
-
-// Best-effort v1 rate limiting — per-instance, resets on restart/deploy, not distributed.
-// Applies after auth so the key is always a real userId. Replace with Upstash or similar
-// if multi-instance deployments or stronger guarantees are needed.
-const rateLimitMap = new Map<string, number>()
-const RATE_LIMIT_MS = 60_000
+import { checkRateLimit } from '@/lib/rate-limit'
 
 export async function POST(req: NextRequest) {
   const { userId } = await auth()
@@ -50,14 +45,16 @@ export async function POST(req: NextRequest) {
   const { sourceType, params: rawParams } = parsed.data
 
   // Rate limit: one job per userId + sourceType per 60s
-  const rateLimitKey = `${userId}:${sourceType}`
-  if (Date.now() - (rateLimitMap.get(rateLimitKey) ?? 0) < RATE_LIMIT_MS) {
+  const rl = await checkRateLimit('jobRun', `${userId}:${sourceType}`)
+  if (!rl.allowed) {
     return NextResponse.json(
       { error: 'Rate limit: wait 60s before re-running this source' },
-      { status: 429 },
+      {
+        status: 429,
+        headers: rl.reset ? { 'Retry-After': String(Math.ceil((rl.reset - Date.now()) / 1000)) } : {},
+      },
     )
   }
-  rateLimitMap.set(rateLimitKey, Date.now())
 
   // Apply server-side param caps — caller-supplied values cannot exceed these limits
   const params: Record<string, unknown> = { ...(rawParams ?? {}) }

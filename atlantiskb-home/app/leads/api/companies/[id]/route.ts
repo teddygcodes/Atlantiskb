@@ -5,6 +5,7 @@ import { Prisma } from '@prisma/client'
 import { CompanyPatchSchema } from '@/lib/validation/schemas'
 import { scoreCompany } from '@/lib/scoring'
 import { extractDomain } from '@/lib/normalization'
+import { decrypt } from '@/lib/crypto'
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -37,6 +38,10 @@ export async function GET(_req: NextRequest, { params }: Params) {
     return NextResponse.json({ error: 'Company not found' }, { status: 404 })
   }
 
+  const decryptedPhone = decrypt(company.phone)
+  const decryptedEmail = decrypt(company.email)
+  const decryptedStreet = decrypt(company.street)
+
   // Compute live score
   const score = scoreCompany({
     county: company.county,
@@ -45,15 +50,29 @@ export async function GET(_req: NextRequest, { params }: Params) {
     specialties: company.specialties,
     description: company.description,
     website: company.website,
-    email: company.email,
-    phone: company.phone,
-    street: company.street,
+    email: decryptedEmail,
+    phone: decryptedPhone,
+    street: decryptedStreet,
     sourceConfidence: company.sourceConfidence,
     signals: company.signals,
     contacts: company.contacts,
   })
 
-  return NextResponse.json({ ...company, scoreDetails: score })
+  const decryptedContacts = company.contacts.map((c) => ({
+    ...c,
+    email: decrypt(c.email),
+    phone: decrypt(c.phone),
+    name: decrypt(c.name),
+  }))
+
+  return NextResponse.json({
+    ...company,
+    phone: decryptedPhone,
+    email: decryptedEmail,
+    street: decryptedStreet,
+    contacts: decryptedContacts,
+    scoreDetails: score,
+  })
 }
 
 export async function DELETE(_req: NextRequest, { params }: Params) {

@@ -3,6 +3,7 @@ import { auth } from '@clerk/nextjs/server'
 import { db } from '@/lib/db'
 import { EnrichBatchSchema } from '@/lib/validation/schemas'
 import { runFullEnrichment } from '@/lib/enrichment/pipeline'
+import { checkRateLimit } from '@/lib/rate-limit'
 
 // Each company can take 5–15 s to enrich; allow enough headroom for a full batch.
 export const maxDuration = 300
@@ -37,6 +38,17 @@ export async function POST(req: NextRequest) {
   }
 
   const { companyIds, limit } = parsed.data
+
+  const rl = await checkRateLimit('enrichBatch', userId)
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: 'Rate limit: wait before starting another batch enrichment' },
+      {
+        status: 429,
+        headers: rl.reset ? { 'Retry-After': String(Math.ceil((rl.reset - Date.now()) / 1000)) } : {},
+      },
+    )
+  }
 
   // Find companies to enrich — includes companies without websites (Places fallback)
   let companies: Array<{ id: string; name: string }>

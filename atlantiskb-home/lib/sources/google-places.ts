@@ -5,7 +5,27 @@
  * Requires GOOGLE_PLACES_API_KEY with "Places API (New)" enabled in Google Cloud Console.
  */
 
+import { z } from 'zod'
+
 const GOOGLE_PLACES_API_KEY = process.env.GOOGLE_PLACES_API_KEY ?? ''
+
+const GooglePlaceRawSchema = z.object({
+  id: z.string().optional(),
+  displayName: z.object({ text: z.string() }).optional(),
+  nationalPhoneNumber: z.string().optional().nullable(),
+  websiteUri: z.string().optional().nullable(),
+  formattedAddress: z.string().optional().nullable(),
+  rating: z.number().optional().nullable(),
+  userRatingCount: z.number().optional().nullable(),
+  types: z.array(z.string()).optional(),
+  businessStatus: z.string().optional().nullable(),
+  googleMapsUri: z.string().optional().nullable(),
+})
+
+const GooglePlacesResponseSchema = z.object({
+  places: z.array(GooglePlaceRawSchema).optional(),
+  nextPageToken: z.string().optional(),
+})
 
 const FIELD_MASK = [
   'places.id',
@@ -64,8 +84,12 @@ export async function findPlaceForCompany(
     })
 
     if (!res.ok) return null
-    const data = await res.json()
-    const place = data.places?.[0]
+    const parsed = GooglePlacesResponseSchema.safeParse(await res.json())
+    if (!parsed.success) {
+      console.warn('[google-places] unexpected response shape:', parsed.error.issues)
+      return null
+    }
+    const place = parsed.data.places?.[0]
     if (!place) return null
 
     return {
@@ -111,22 +135,26 @@ export async function searchPlaces(
     })
 
     if (!res.ok) return { results: [] }
-    const data = await res.json()
+    const parsed = GooglePlacesResponseSchema.safeParse(await res.json())
+    if (!parsed.success) {
+      console.warn('[google-places] unexpected response shape:', parsed.error.issues)
+      return { results: [] }
+    }
 
-    const results: PlaceResult[] = (data.places ?? []).map((place: Record<string, unknown>) => ({
-      placeId: (place.id as string) ?? '',
-      name: ((place.displayName as { text?: string }) ?? {}).text ?? '',
-      phone: (place.nationalPhoneNumber as string | null) ?? null,
-      website: (place.websiteUri as string | null) ?? null,
-      formattedAddress: (place.formattedAddress as string | null) ?? null,
-      rating: (place.rating as number | null) ?? null,
-      userRatingCount: (place.userRatingCount as number | null) ?? null,
-      types: (place.types as string[]) ?? [],
-      businessStatus: (place.businessStatus as string | null) ?? null,
-      googleMapsUri: (place.googleMapsUri as string | null) ?? null,
+    const results: PlaceResult[] = (parsed.data.places ?? []).map((place) => ({
+      placeId: place.id ?? '',
+      name: place.displayName?.text ?? '',
+      phone: place.nationalPhoneNumber ?? null,
+      website: place.websiteUri ?? null,
+      formattedAddress: place.formattedAddress ?? null,
+      rating: place.rating ?? null,
+      userRatingCount: place.userRatingCount ?? null,
+      types: place.types ?? [],
+      businessStatus: place.businessStatus ?? null,
+      googleMapsUri: place.googleMapsUri ?? null,
     }))
 
-    return { results, nextPageToken: (data.nextPageToken as string) ?? undefined }
+    return { results, nextPageToken: parsed.data.nextPageToken }
   } catch {
     return { results: [] }
   }

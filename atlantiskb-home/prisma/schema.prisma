@@ -108,6 +108,7 @@ model Company {
   googlePlaceId        String?       @unique
   googleRating         Float?
   recordOrigin         RecordOrigin  @default(DEMO)
+  phoneHmac            String?       // HMAC of normalized phone — enables WHERE lookup without decrypting
 
   signals   Signal[]
   contacts  Contact[]
@@ -121,6 +122,7 @@ model Company {
   @@index([status])
   @@index([createdAt])
   @@index([recordOrigin])
+  @@index([phoneHmac])
 }
 
 model Signal {

@@ -1,0 +1,27 @@
+[     135ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://atlantiskb.com/__clerk/v1/health:0
+[     231ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://atlantiskb.com/__clerk/npm/@clerk/clerk-js@6/dist/clerk.browser.js:0
+[     263ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://atlantiskb.com/__clerk/npm/@clerk/ui@1/dist/ui.browser.js:0
+[     300ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://atlantiskb.com/__clerk/npm/@clerk/clerk-js@6/dist/clerk.browser.js:0
+[     484ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://atlantiskb.com/__clerk/npm/@clerk/clerk-js@6/dist/clerk.browser.js:0
+[     885ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://atlantiskb.com/__clerk/npm/@clerk/clerk-js@6/dist/clerk.browser.js:0
+[    1794ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://atlantiskb.com/__clerk/npm/@clerk/clerk-js@6/dist/clerk.browser.js:0
+[    3219ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://atlantiskb.com/__clerk/npm/@clerk/clerk-js@6/dist/clerk.browser.js:0
+[    6221ms] [WARNING] The resource https://atlantiskb.com/__clerk/npm/@clerk/ui@1/dist/ui.browser.js was preloaded using link preload but not used within a few seconds from the window's load event. Please make sure it has an appropriate `as` value and it is preloaded intentionally. @ https://atlantiskb.com/__clerk/v1/health:0
+[    6792ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://atlantiskb.com/__clerk/npm/@clerk/clerk-js@6/dist/clerk.browser.js:0
+[    6799ms] e: Clerk: Failed to load Clerk JS, failed to load script: https://atlantiskb.com/__clerk/npm/@clerk/clerk-js@6/dist/clerk.browser.js
+
+(code="failed_to_load_clerk_js")
+
+
+    at r (https://atlantiskb.com/_next/static/chunks/cafd71d5c5856dab.js?dpl=dpl_5m7uajDPzTN1TMkhQsnKo3nCeG7k:2:2454)
+    at https://atlantiskb.com/_next/static/chunks/cafd71d5c5856dab.js?dpl=dpl_5m7uajDPzTN1TMkhQsnKo3nCeG7k:2:2917
+[    9801ms] [WARNING] The resource https://atlantiskb.com/__clerk/npm/@clerk/ui@1/dist/ui.browser.js was preloaded using link preload but not used within a few seconds from the window's load event. Please make sure it has an appropriate `as` value and it is preloaded intentionally. @ https://atlantiskb.com/__clerk/v1/health:0
+[   15234ms] [ERROR] e: Clerk: Failed to load Clerk JS
+
+(code="failed_to_load_clerk_js")
+
+
+    at r (https://atlantiskb.com/_next/static/chunks/cafd71d5c5856dab.js?dpl=dpl_5m7uajDPzTN1TMkhQsnKo3nCeG7k:2:2454)
+    at X (https://atlantiskb.com/_next/static/chunks/cafd71d5c5856dab.js?dpl=dpl_5m7uajDPzTN1TMkhQsnKo3nCeG7k:2:2815)
+    at async d.getClerkJsEntryChunk (https://atlantiskb.com/_next/static/chunks/cafd71d5c5856dab.js?dpl=dpl_5m7uajDPzTN1TMkhQsnKo3nCeG7k:2:41495)
+    at async d.getEntryChunks (https://atlantiskb.com/_next/static/chunks/cafd71d5c5856dab.js?dpl=dpl_5m7uajDPzTN1TMkhQsnKo3nCeG7k:2:40974) @ https://atlantiskb.com/_next/static/chunks/cafd71d5c5856dab.js?dpl=dpl_5m7uajDPzTN1TMkhQsnKo3nCeG7k:1

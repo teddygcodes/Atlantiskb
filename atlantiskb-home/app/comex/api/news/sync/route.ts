@@ -116,7 +116,12 @@ function toNewsMetalSqlLiteral(metal: NewsMetal): Prisma.Sql {
   }
 }
 
-export async function GET() {
+export async function GET(req: Request) {
+  const cronSecret = process.env.CRON_SECRET
+  if (!cronSecret || req.headers.get('authorization') !== `Bearer ${cronSecret}`) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
   const parser = new Parser({ timeout: STAGE_TIMEOUT_MS });
   const results: SourceResult[] = [];
 

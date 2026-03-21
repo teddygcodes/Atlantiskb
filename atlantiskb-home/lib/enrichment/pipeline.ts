@@ -10,6 +10,7 @@ import { enrichWithAI } from '@/lib/ai'
 import { scoreCompany } from '@/lib/scoring'
 import { findPlaceForCompany, isGooglePlacesConfigured, buildPlaceText } from '@/lib/sources/google-places'
 import { deriveCountyFromCity, geocodeCountyFromAddress } from '@/lib/normalization'
+import { encrypt, hmacToken } from '@/lib/crypto'
 
 export interface PipelineResult {
   success: boolean
@@ -73,7 +74,8 @@ async function _runFullEnrichment(companyId: string): Promise<PipelineResult> {
     await db.company.update({
       where: { id: companyId },
       data: {
-        phone: company.phone || place.phone || undefined,
+        phone: company.phone || (place.phone ? encrypt(place.phone) : undefined),
+        phoneHmac: !company.phone && place.phone ? hmacToken(place.phone) : undefined,
         website: place.website || undefined,
         googlePlaceId: place.placeId || undefined,
         lastEnrichedAt: new Date(),

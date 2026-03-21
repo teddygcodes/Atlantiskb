@@ -83,10 +83,8 @@ export async function POST(req: NextRequest) {
       relax_column_count: true,
     }) as Record<string, string>[]
   } catch (err) {
-    return NextResponse.json(
-      { error: 'Could not parse CSV', details: err instanceof Error ? err.message : String(err) },
-      { status: 400 },
-    )
+    console.error('[csv/preview] parse error:', err)
+    return NextResponse.json({ error: 'Could not parse CSV — check file format' }, { status: 400 })
   }
 
   if (rows.length === 0) {

@@ -8,6 +8,7 @@ import { parse as parseHtml } from 'node-html-parser'
 import { normalizeDomain, normalizePhone } from '@/lib/normalization'
 import { classifyText } from './keywords'
 import { db } from '@/lib/db'
+import { encrypt, hmacToken } from '@/lib/crypto'
 
 const TIMEOUT_MS = parseInt(process.env.ENRICHMENT_TIMEOUT_MS ?? '10000')
 const MAX_PAGES = parseInt(process.env.ENRICHMENT_MAX_PAGES ?? '4')
@@ -33,33 +34,32 @@ export interface EnrichmentResult {
 const SUBPAGE_PATHS = ['/about', '/services', '/contact', '/about-us', '/our-services', '/what-we-do']
 
 // Per-domain robots.txt disallow cache.
-// null = robots.txt unreachable; v1 policy: treat as no restrictions and proceed with crawl.
-// To tighten in a future version: on unreachable robots.txt, skip crawl rather than allow.
+// Fail-closed policy: unreachable robots.txt → ['/'] (disallow all paths) to skip crawl.
 // Cache is process-local — avoids repeated fetches in a run, not persistent across restarts.
-const robotsCache = new Map<string, string[] | null>()
+const robotsCache = new Map<string, string[]>()
 
 /**
  * Fetch and parse Disallow paths for User-agent: * from robots.txt.
  * v1 lightweight robots respect: reads User-agent: * and Disallow: lines only.
  * Does not handle Allow:, wildcard patterns, crawl-delay, multiple wildcard blocks,
  * or inline comments — first-pass basic structure only.
- * Returns null if robots.txt is unreachable (v1 policy: allow crawl; see cache comment).
+ * Fail-closed: returns ['/'] (disallow all) if robots.txt is unreachable.
  * Not exported — mock at the fetch/fetchPage level in tests rather than this function.
  */
-async function fetchRobots(domain: string, siteOrigin: string): Promise<string[] | null> {
+async function fetchRobots(domain: string, siteOrigin: string): Promise<string[]> {
   if (robotsCache.has(domain)) return robotsCache.get(domain)!
   try {
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), TIMEOUT_MS)
     const res = await fetch(`${siteOrigin}/robots.txt`, { signal: controller.signal })
     clearTimeout(timer)
-    if (!res.ok) { robotsCache.set(domain, null); return null }
+    if (!res.ok) { robotsCache.set(domain, ['/']); return ['/'] }
     const disallowed = parseRobotsDisallowedPaths(await res.text())
     robotsCache.set(domain, disallowed)
     return disallowed
   } catch {
-    robotsCache.set(domain, null)
-    return null
+    robotsCache.set(domain, ['/'])
+    return ['/']
   }
 }
 
@@ -86,10 +86,9 @@ export function parseRobotsDisallowedPaths(text: string): string[] {
 
 /**
  * Returns true if robots.txt disallows the given path (prefix match, v1).
- * null disallowed list = unreachable robots.txt = allow (v1 policy). Exported for unit testing.
+ * Fail-closed: ['/'] means unreachable robots.txt — all paths are blocked.
  */
-export function isRobotsBlocked(path: string, disallowed: string[] | null): boolean {
-  if (!disallowed) return false
+export function isRobotsBlocked(path: string, disallowed: string[]): boolean {
   return disallowed.some((d) => d.length > 0 && path.startsWith(d))
 }
 
@@ -322,8 +321,9 @@ export async function enrichCompany(
           lastEnrichedAt: new Date(),
           lastSeenAt: new Date(),
           description: payload.description || undefined,
-          email: payload.emails[0] || undefined,
-          phone: payload.phones[0] || undefined,
+          email: payload.emails[0] ? encrypt(payload.emails[0]) : undefined,
+          phone: payload.phones[0] ? encrypt(payload.phones[0]) : undefined,
+          phoneHmac: payload.phones[0] ? hmacToken(payload.phones[0]) : undefined,
           segments:
             classification.segments.length > 0 ? classification.segments : undefined,
           specialties:

@@ -1,0 +1,10 @@
+[    2073ms] [ERROR] Failed to load resource: the server responded with a status of 400 () @ https://atlantiskb.com/__clerk/v1/client?__clerk_api_version=2025-11-10&_clerk_js_version=6.1.0:0
+[    2156ms] [ERROR] Failed to load resource: the server responded with a status of 400 () @ https://atlantiskb.com/__clerk/v1/environment?__clerk_api_version=2025-11-10&_clerk_js_version=6.1.0:0
+[    2160ms] [ERROR] e: We were unable to attribute this request to an instance running on Clerk. Make sure that your Clerk Publishable Key is correct.
+    at tD._baseFetch (https://atlantiskb.com/__clerk/npm/@clerk/clerk-js@6/dist/clerk.browser.js:18:171)
+    at async tW.execute (https://atlantiskb.com/__clerk/npm/@clerk/clerk-js@6/dist/clerk.browser.js:17:6639)
+    at async iX._baseGet (https://atlantiskb.com/__clerk/npm/@clerk/clerk-js@6/dist/clerk.browser.js:18:497)
+    at async Promise.all (index 1)
+    at async #em (https://atlantiskb.com/__clerk/npm/@clerk/clerk-js@6/dist/clerk.browser.js:18:197535)
+    at async nM.load (https://atlantiskb.com/__clerk/npm/@clerk/clerk-js@6/dist/clerk.browser.js:18:156506)
+    at async d.getEntryChunks (https://atlantiskb.com/_next/static/chunks/cafd71d5c5856dab.js?dpl=dpl_45fNt2zNL9kAR1RzbRJM5qadz335:2:41189) @ https://atlantiskb.com/_next/static/chunks/cafd71d5c5856dab.js?dpl=dpl_45fNt2zNL9kAR1RzbRJM5qadz335:1

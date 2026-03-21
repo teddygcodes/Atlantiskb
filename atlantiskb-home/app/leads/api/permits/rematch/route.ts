@@ -17,8 +17,7 @@ export async function POST(req: Request) {
     const summary = await rematchPermits(county)
     return NextResponse.json(summary)
   } catch (err) {
-    const error = err instanceof Error ? err.message : String(err)
-    console.error('[permits/rematch] failed:', error)
-    return NextResponse.json({ error }, { status: 500 })
+    console.error('[permits/rematch] failed:', err)
+    return NextResponse.json({ error: 'Rematch failed — please try again' }, { status: 500 })
   }
 }

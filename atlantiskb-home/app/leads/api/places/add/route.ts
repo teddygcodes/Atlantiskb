@@ -5,6 +5,7 @@ import { PlacesAddSchema } from '@/lib/validation/schemas'
 import { findExistingCompany } from '@/lib/dedupe'
 import { normalizeName, normalizeDomain, normalizePhone } from '@/lib/normalization'
 import { scoreCompany } from '@/lib/scoring'
+import { encrypt, hmacToken } from '@/lib/crypto'
 
 export async function POST(req: Request) {
   const { userId } = await auth()
@@ -43,7 +44,7 @@ export async function POST(req: Request) {
 
         const updateData: Record<string, unknown> = {}
         if (!existingCompany?.website && place.website) updateData.website = place.website
-        if (!existingCompany?.phone && phone) updateData.phone = phone
+        if (!existingCompany?.phone && phone) { updateData.phone = encrypt(phone); updateData.phoneHmac = hmacToken(phone) }
         if (!existingCompany?.googlePlaceId) updateData.googlePlaceId = place.placeId
         if (!existingCompany?.googleRating && place.rating != null) updateData.googleRating = place.rating
 
@@ -64,7 +65,7 @@ export async function POST(req: Request) {
       if (byPlaceId) {
         const updateData: Record<string, unknown> = {}
         if (!byPlaceId.website && place.website) updateData.website = place.website
-        if (!byPlaceId.phone && phone) updateData.phone = phone
+        if (!byPlaceId.phone && phone) { updateData.phone = encrypt(phone); updateData.phoneHmac = hmacToken(phone) }
         if (byPlaceId.googleRating == null && place.rating != null) updateData.googleRating = place.rating
         if (Object.keys(updateData).length > 0) {
           await db.company.update({ where: { id: byPlaceId.id }, data: updateData })
@@ -98,7 +99,8 @@ export async function POST(req: Request) {
           data: {
             name: place.name,
             normalizedName: normalizedNameVal,
-            phone: phone ?? undefined,
+            phone: phone ? encrypt(phone) : undefined,
+            phoneHmac: phone ? hmacToken(phone) : undefined,
             website: place.website ?? undefined,
             domain: domain ?? undefined,
             street: place.address ?? undefined,
@@ -127,7 +129,8 @@ export async function POST(req: Request) {
             data: {
               name: place.name,
               normalizedName: normalizedNameVal,
-              phone: phone ?? undefined,
+              phone: phone ? encrypt(phone) : undefined,
+              phoneHmac: phone ? hmacToken(phone) : undefined,
               website: place.website ?? undefined,
               street: place.address ?? undefined,
               state: 'GA',

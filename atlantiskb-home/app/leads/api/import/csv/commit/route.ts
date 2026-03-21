@@ -7,6 +7,8 @@ import { normalizeName, normalizeDomain, normalizePhone, extractDomain, deriveCo
 import { findExistingCompany, mergeCompanyData } from '@/lib/dedupe'
 import { ImportRowSchema } from '@/lib/validation/schemas'
 import { scoreCompany } from '@/lib/scoring'
+import { checkRateLimit } from '@/lib/rate-limit'
+import { encrypt, hmacToken } from '@/lib/crypto'
 
 const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024
 
@@ -122,6 +124,17 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  const rl = await checkRateLimit('csvImport', userId)
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: 'Rate limit: too many imports — please wait before trying again' },
+      {
+        status: 429,
+        headers: rl.reset ? { 'Retry-After': String(Math.ceil((rl.reset - Date.now()) / 1000)) } : {},
+      },
+    )
+  }
+
   const text = await file.text()
   let rawRows: Record<string, string>[]
   try {
@@ -133,10 +146,8 @@ export async function POST(req: NextRequest) {
       relax_column_count: true,
     }) as Record<string, string>[]
   } catch (err) {
-    return NextResponse.json(
-      { error: 'Could not parse CSV', details: err instanceof Error ? err.message : String(err) },
-      { status: 400 },
-    )
+    console.error('[csv/commit] parse error:', err)
+    return NextResponse.json({ error: 'Could not parse CSV — check file format' }, { status: 400 })
   }
 
   // Create a CrawlJob for this import
@@ -282,9 +293,28 @@ export async function POST(req: NextRequest) {
   try {
     for (const op of plannedWrites) {
       if (op.type === 'update') {
-        await db.company.update({ where: { id: op.companyId }, data: op.data })
+        const { phone, email, street, ...rest } = op.data
+        await db.company.update({
+          where: { id: op.companyId },
+          data: {
+            ...rest,
+            phone: phone !== undefined ? encrypt(phone) : undefined,
+            phoneHmac: phone !== undefined ? hmacToken(phone) : undefined,
+            email: email !== undefined ? encrypt(email) : undefined,
+            street: street !== undefined ? encrypt(street) : undefined,
+          },
+        })
       } else {
-        await db.company.create({ data: op.data })
+        const { phone, email, street, ...rest } = op.data
+        await db.company.create({
+          data: {
+            ...rest,
+            phone: phone ? encrypt(phone) : undefined,
+            phoneHmac: phone ? hmacToken(phone) : undefined,
+            email: email ? encrypt(email) : undefined,
+            street: street ? encrypt(street) : undefined,
+          },
+        })
       }
     }
   } catch (err) {
@@ -293,10 +323,7 @@ export async function POST(req: NextRequest) {
       where: { id: job.id },
       data: { status: 'FAILED', finishedAt: new Date(), errorMessage },
     })
-    return NextResponse.json(
-      { error: 'Import failed — database write error', details: errorMessage },
-      { status: 500 },
-    )
+    return NextResponse.json({ error: 'Import failed — please try again' }, { status: 500 })
   }
 
   await db.crawlJob.update({

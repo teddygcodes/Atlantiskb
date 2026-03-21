@@ -8,7 +8,12 @@ import { fetchYahooPrices } from '@/lib/comex/fetch-prices'
  * Fetches price history from Yahoo Finance and upserts into CommodityPrice.
  * No auth — this is a Vercel cron endpoint (GET required by Vercel cron).
  */
-export async function GET() {
+export async function GET(req: Request) {
+  const cronSecret = process.env.CRON_SECRET
+  if (!cronSecret || req.headers.get('authorization') !== `Bearer ${cronSecret}`) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
   const results: Array<{ metal: string; upserted: number; error?: string }> = []
 
   for (const metal of METAL_KEYS) {
