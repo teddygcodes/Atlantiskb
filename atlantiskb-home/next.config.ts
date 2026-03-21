@@ -13,10 +13,10 @@ const securityHeaders = [
     key: 'Content-Security-Policy',
     value: [
       "default-src 'self'",
-      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://clerk.com https://*.clerk.accounts.dev",
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://clerk.com https://*.clerk.accounts.dev https://maps.googleapis.com https://*.googleapis.com https://*.gstatic.com",
       "style-src 'self' 'unsafe-inline'",
-      "img-src 'self' data: https:",
-      "connect-src 'self' https://clerk.com https://*.clerk.accounts.dev https://api.anthropic.com https://api.openai.com wss:",
+      "img-src 'self' data: https: https://*.googleapis.com https://*.gstatic.com",
+      "connect-src 'self' https://clerk.com https://*.clerk.accounts.dev https://api.anthropic.com https://api.openai.com wss: https://maps.googleapis.com https://*.googleapis.com https://*.gstatic.com",
       "worker-src 'self' blob:",
       "frame-ancestors 'none'",
       "base-uri 'self'",
