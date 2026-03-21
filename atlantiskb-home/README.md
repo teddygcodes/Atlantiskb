@@ -272,7 +272,7 @@ Computed on-the-fly from stored price history:
 `computeTechnicalSummary(prices)` returns all indicators plus a bias label (bullish / bearish / neutral).
 
 #### Scenarios (`POST /comex/api/scenario`)
-Returns bull / base / bear price bands for 1-week, 30-day, and 90-day horizons, plus key support/resistance levels and narrative catalysts. Rendered as a fan chart in `ScenarioChart` (y-axis domain computed from actual price range — not zero-based).
+AI-generated bull / base / bear scenario outlook using the technical summary as input context. Returns price bands for 1-week, 30-day, and 90-day horizons, plus key support/resistance levels, narrative catalysts per scenario, and a current price bias. Rendered as a fan chart in `ScenarioChart` with a y-axis domain computed from the actual price range (not zero-based). The scenario generation is wired to "Generate Copper/Aluminum Outlook" buttons on the COMEX page and feeds both the chart and `ScenarioTable` (price targets + catalyst bullets per horizon).
 
 #### News & RAG Agent
 1. **News sync** (`POST /comex/api/news/sync`): fetches RSS from configured feeds, filters by relevance keywords, embeds each snippet via Voyage AI (`embedText()`), stores in `NewsArticle.embedding` (pgvector).
@@ -854,21 +854,28 @@ Check readiness at `GET /comex/api/health/schema`. The agent falls back to keywo
 - All runtime env vars must be set in the Vercel dashboard.
 - Security headers (CSP, HSTS, X-Frame-Options, Permissions-Policy) configured in `next.config.ts`.
 
+### Security Hardening
+- **CSP / security headers**: `next.config.ts` sets Content-Security-Policy, HSTS, X-Frame-Options, X-Content-Type-Options, and Permissions-Policy on every response.
+- **Cron endpoint auth**: `/comex/api/prices/sync` and `/comex/api/news/sync` require a `CRON_SECRET` bearer token, preventing unauthorized calls to those sync endpoints.
+- **PII encryption**: Contact phone numbers are encrypted at rest with AES-GCM (`lib/crypto.ts`). Lookups use a separate HMAC token so phone numbers are never decrypted for WHERE queries.
+- **robots.txt compliance**: Website enrichment respects `robots.txt` disallow rules and fails closed (unreachable robots.txt = no crawl).
+- **Clerk proxy**: Frontend Clerk API calls are routed through `/__clerk/*` → `/api/clerk-proxy/*` to avoid exposing the Clerk publishable key origin directly.
+
 ---
 
-## Known Limitations & Roadmap
+## Known Limitations
 
-### Current Limitations
 - Several permit adapters are in demo/limited mode. Live portal schemas are not confirmed for all counties.
 - Long-running sync endpoints (permit sync, batch enrichment) block HTTP connections. No durable job queue.
 - `* 2.ts` duplicate files exist from editor backups — not in active code paths.
 - Auth checks are duplicated (middleware + per-route `auth()`), which is robust but repetitive.
 - COMEX vector setup requires manual pgvector extension beyond base migration lifecycle.
 
-### Roadmap
-1. Move permit sync and batch enrichment to a durable queue (e.g. Vercel Queue, Inngest, BullMQ).
-2. Add contract tests for high-value pipelines: enrichment, CSV import, permit sync, RAG retrieval.
-3. Add structured logging + job-level metrics + failure alerting.
-4. Consolidate permit adapter registry with explicit active/demo status per county.
-5. Provide a canonical `.env.example` covering every integration.
-6. Normalize CSS approach (currently mixed Tailwind + inline styles).
+## Roadmap
+
+Planned features (in rough priority order):
+
+1. **Lighting integration** — extend enrichment and segment classification to capture lighting contractor activity; surface as a separate demand category in scoring.
+2. **Pricing from ADC / PRISM** — pull distributor pricing data into company detail views so reps can see margin context alongside lead scores.
+3. **Submittal PDF generation** — generate product submittal packages from company profile + segment data for use in sales calls.
+4. **Fixture schedule upload** — parse uploaded fixture schedules (PDF/Excel) and match line items to products, auto-creating signals and enriching company specialties.
