@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import { NextResponse } from "next/server";
+import { auth } from "@clerk/nextjs/server";
 import Parser from "rss-parser";
 import { Prisma } from "@prisma/client";
 import { db as prisma } from "@/lib/db";
@@ -118,8 +119,12 @@ function toNewsMetalSqlLiteral(metal: NewsMetal): Prisma.Sql {
 
 export async function GET(req: Request) {
   const cronSecret = process.env.CRON_SECRET
-  if (!cronSecret || req.headers.get('authorization') !== `Bearer ${cronSecret}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const isCron = cronSecret && req.headers.get('authorization') === `Bearer ${cronSecret}`
+  if (!isCron) {
+    const { userId } = await auth()
+    if (!userId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
   }
 
   const parser = new Parser({ timeout: STAGE_TIMEOUT_MS });

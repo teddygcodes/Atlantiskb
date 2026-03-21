@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { auth } from '@clerk/nextjs/server'
 import { db } from '@/lib/db'
 import { METAL_KEYS, METAL_CONFIG } from '@/lib/comex/constants'
 import { fetchYahooPrices } from '@/lib/comex/fetch-prices'
@@ -6,12 +7,16 @@ import { fetchYahooPrices } from '@/lib/comex/fetch-prices'
 /**
  * GET /comex/api/prices/sync
  * Fetches price history from Yahoo Finance and upserts into CommodityPrice.
- * No auth — this is a Vercel cron endpoint (GET required by Vercel cron).
+ * Allowed by: Vercel cron (CRON_SECRET bearer token) or authenticated Clerk user.
  */
 export async function GET(req: Request) {
   const cronSecret = process.env.CRON_SECRET
-  if (!cronSecret || req.headers.get('authorization') !== `Bearer ${cronSecret}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const isCron = cronSecret && req.headers.get('authorization') === `Bearer ${cronSecret}`
+  if (!isCron) {
+    const { userId } = await auth()
+    if (!userId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
   }
 
   const results: Array<{ metal: string; upserted: number; error?: string }> = []
