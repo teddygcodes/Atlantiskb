@@ -186,6 +186,25 @@ export default function ScenarioChart({
 
   const { points, todayDate } = buildChartData(priceHistory, scenario, horizon, currentPrice)
 
+  // Compute y-axis domain from all chart values to avoid defaulting to [0, auto]
+  const allYValues: number[] = []
+  for (const p of points) {
+    if (!p.isForecast) {
+      allYValues.push(p.close)
+    } else {
+      allYValues.push(p.bearBase)
+      allYValues.push(p.bearBase + p.bearDelta)
+      allYValues.push(p.bullBase)
+      allYValues.push(p.bullBase + p.bullDelta)
+      allYValues.push(p.baseBase)
+      allYValues.push(p.baseBase + p.baseDelta)
+    }
+  }
+  const yMin = Math.min(...allYValues)
+  const yMax = Math.max(...allYValues)
+  const yPad = (yMax - yMin) * 0.05 || 1
+  const yDomain: [number, number] = [yMin - yPad, yMax + yPad]
+
   // X-axis ticks: ~6 labels spread across the data
   const tickInterval = Math.max(1, Math.floor(points.length / 6))
   const xTicks = points.filter((_, i) => i % tickInterval === 0).map((p) => p.date)
@@ -234,6 +253,7 @@ export default function ScenarioChart({
           />
           <YAxis
             orientation="right"
+            domain={yDomain}
             tick={{ fontSize: 10, fill: 'var(--text-muted)' }}
             tickLine={false}
             axisLine={false}
