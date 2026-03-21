@@ -17,6 +17,7 @@ const securityHeaders = [
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data: https:",
       "connect-src 'self' https://clerk.com https://*.clerk.accounts.dev https://api.anthropic.com https://api.openai.com wss:",
+      "worker-src 'self' blob:",
       "frame-ancestors 'none'",
       "base-uri 'self'",
       "form-action 'self'",
