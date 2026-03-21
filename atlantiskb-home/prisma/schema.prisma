@@ -266,6 +266,7 @@ model CommodityPrice {
   open           Float?
   high           Float?
   low            Float?
+  ma30           Float?
   settlementDate DateTime
   createdAt      DateTime @default(now())
 

@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "CommodityPrice" ADD COLUMN "ma30" DOUBLE PRECISION;
