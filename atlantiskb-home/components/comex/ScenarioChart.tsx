@@ -254,6 +254,7 @@ export default function ScenarioChart({
           <YAxis
             orientation="right"
             domain={yDomain}
+            allowDataOverflow
             tick={{ fontSize: 10, fill: 'var(--text-muted)' }}
             tickLine={false}
             axisLine={false}
