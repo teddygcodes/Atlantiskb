@@ -14,8 +14,17 @@ import {
 import type { DailyPrice } from '@/lib/comex/fetch-prices'
 import type { MAPoint } from '@/lib/comex/moving-average'
 import type { Prediction } from '@/lib/comex/predictions'
+import type {
+  IndicatorPoint,
+  MACDPoint,
+  BollingerPoint,
+  StochasticPoint,
+  TechnicalSummary,
+} from '@/lib/comex/technical-indicators'
 import { METAL_CONFIG, METAL_KEYS, type MetalKey } from '@/lib/comex/constants'
 import AgentPanel from './components/AgentPanel'
+import TechnicalChart from '@/components/comex/TechnicalChart'
+import IndicatorPanel from '@/components/comex/IndicatorPanel'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -26,6 +35,23 @@ interface MetalData {
 }
 
 type PricesResponse = Partial<Record<MetalKey, MetalData>>
+
+interface TechnicalsResponse {
+  metal: string
+  currentPrice: number
+  computedAt: string
+  summary: TechnicalSummary
+  indicators: {
+    sma: { sma10: IndicatorPoint[]; sma30: IndicatorPoint[]; sma50: IndicatorPoint[] }
+    rsi: IndicatorPoint[]
+    macd: MACDPoint[]
+    bollinger: BollingerPoint[]
+    stochastic: StochasticPoint[]
+    atr: IndicatorPoint[]
+  }
+  supportResistance: { support: number[]; resistance: number[] }
+  priceHistory: Array<{ date: string; open: number | null; high: number | null; low: number | null; close: number }>
+}
 
 // ── Chart data merge ─────────────────────────────────────────────────────────
 
@@ -242,7 +268,17 @@ function MetalChart({ data, unit }: { data: MetalData; unit: string }) {
   )
 }
 
-function MetalCard({ metalKey, data }: { metalKey: MetalKey; data: MetalData }) {
+function MetalCard({
+  metalKey,
+  data,
+  technicals,
+  technicalsLoading,
+}: {
+  metalKey: MetalKey
+  data: MetalData
+  technicals: TechnicalsResponse | null
+  technicalsLoading: boolean
+}) {
   const config = METAL_CONFIG[metalKey]
   return (
     <div
@@ -266,6 +302,41 @@ function MetalCard({ metalKey, data }: { metalKey: MetalKey; data: MetalData }) 
       </div>
 
       <MetalChart data={data} unit={config.unit} />
+
+      {/* Technical analysis section */}
+      {technicalsLoading && (
+        <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 16 }}>
+          Loading indicators…
+        </p>
+      )}
+      {!technicalsLoading && technicals && (
+        <>
+          <TechnicalChart
+            metal={metalKey}
+            data={{
+              priceHistory: technicals.priceHistory,
+              indicators: {
+                sma: technicals.indicators.sma,
+                bollinger: technicals.indicators.bollinger,
+              },
+              supportResistance: technicals.supportResistance,
+              summary: technicals.summary,
+            }}
+          />
+          <IndicatorPanel
+            data={{
+              indicators: {
+                rsi: technicals.indicators.rsi,
+                macd: technicals.indicators.macd,
+                stochastic: technicals.indicators.stochastic,
+              },
+              priceHistory: technicals.priceHistory,
+            }}
+          />
+          {/* Placeholder for Task 4: Generate Outlook button */}
+          <div style={{ marginTop: 16 }} />
+        </>
+      )}
     </div>
   )
 }
@@ -329,6 +400,9 @@ export default function ComexPage() {
   const [syncing, setSyncing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [syncResult, setSyncResult] = useState<string | null>(null)
+  const [copperTechnicals, setCopperTechnicals] = useState<TechnicalsResponse | null>(null)
+  const [aluminumTechnicals, setAluminumTechnicals] = useState<TechnicalsResponse | null>(null)
+  const [technicalsLoading, setTechnicalsLoading] = useState(true)
 
   async function loadPrices() {
     try {
@@ -341,6 +415,28 @@ export default function ComexPage() {
       setError(err instanceof Error ? err.message : 'Unknown error')
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function loadTechnicals() {
+    setTechnicalsLoading(true)
+    try {
+      const [copperRes, aluminumRes] = await Promise.all([
+        fetch('/comex/api/technicals?metal=copper'),
+        fetch('/comex/api/technicals?metal=aluminum'),
+      ])
+      if (copperRes.ok) {
+        const json: TechnicalsResponse = await copperRes.json()
+        setCopperTechnicals(json)
+      }
+      if (aluminumRes.ok) {
+        const json: TechnicalsResponse = await aluminumRes.json()
+        setAluminumTechnicals(json)
+      }
+    } catch {
+      // silently fail — don't break existing UI
+    } finally {
+      setTechnicalsLoading(false)
     }
   }
 
@@ -362,7 +458,11 @@ export default function ComexPage() {
     }
   }
 
-  useEffect(() => { loadPrices() }, [])
+  useEffect(() => {
+    loadPrices()
+    loadTechnicals()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // Determine if we have any data
   const hasData = data && METAL_KEYS.some((k) => (data[k]?.history?.length ?? 0) > 0)
@@ -450,7 +550,16 @@ export default function ComexPage() {
             {METAL_KEYS.map((metalKey) => {
               const metalData = data?.[metalKey]
               if (!metalData || metalData.history.length === 0) return null
-              return <MetalCard key={metalKey} metalKey={metalKey} data={metalData} />
+              const technicals = metalKey === 'copper' ? copperTechnicals : aluminumTechnicals
+              return (
+                <MetalCard
+                  key={metalKey}
+                  metalKey={metalKey}
+                  data={metalData}
+                  technicals={technicals}
+                  technicalsLoading={technicalsLoading}
+                />
+              )
             })}
           </div>
 
