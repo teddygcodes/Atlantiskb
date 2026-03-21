@@ -26,7 +26,7 @@ import type {
 // ---------------------------------------------------------------------------
 
 interface CacheEntry {
-  data: unknown
+  data: TechnicalsResponse
   timestamp: number
 }
 
@@ -92,12 +92,14 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(cached.data)
   }
 
-  // 4. Fetch from DB
-  const rows = await db.commodityPrice.findMany({
-    where: { metal: metalParam },
-    orderBy: { settlementDate: 'asc' },
-    take: 365,
-  })
+  // 4. Fetch last 365 rows from DB (desc + reverse = most recent 365, chronological order)
+  const rows = (
+    await db.commodityPrice.findMany({
+      where: { metal: metalParam },
+      orderBy: { settlementDate: 'desc' },
+      take: 365,
+    })
+  ).reverse()
 
   if (rows.length === 0) {
     return NextResponse.json({ error: 'no_price_data' }, { status: 404 })
@@ -126,17 +128,8 @@ export async function GET(request: NextRequest) {
   const supportResistance = findSupportResistance(ohlcData)
   const summary = computeTechnicalSummary(ohlcData, metalParam)
 
-  // 8. Build price history
-  const priceHistory = rows.map((row) => ({
-    date: row.settlementDate.toISOString().slice(0, 10),
-    open: row.open ?? null,
-    high: row.high ?? null,
-    low: row.low ?? null,
-    close: row.close,
-  }))
-
-  // Current price = last close
-  const currentPrice = rows[rows.length - 1].close
+  // ohlcData and priceHistory are the same shape — reuse
+  const currentPrice = ohlcData[ohlcData.length - 1].close
   const computedAt = new Date().toISOString()
 
   const result: TechnicalsResponse = {
@@ -157,10 +150,9 @@ export async function GET(request: NextRequest) {
       atr: atrPoints,
     },
     supportResistance,
-    priceHistory,
+    priceHistory: ohlcData,
   }
 
-  // 8. Cache result
   cache.set(cacheKey, { data: result, timestamp: Date.now() })
 
   return NextResponse.json(result)
