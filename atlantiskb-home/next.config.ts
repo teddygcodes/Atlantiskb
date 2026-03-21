@@ -17,6 +17,7 @@ const securityHeaders = [
       "style-src 'self' 'unsafe-inline' https://*.googleapis.com https://*.gstatic.com",
       "img-src 'self' data: https: https://*.googleapis.com https://*.gstatic.com",
       "connect-src 'self' https://clerk.com https://*.clerk.accounts.dev https://api.anthropic.com https://api.openai.com wss: https://maps.googleapis.com https://*.googleapis.com https://*.gstatic.com",
+      "font-src 'self' https://*.gstatic.com",
       "worker-src 'self' blob:",
       "frame-ancestors 'none'",
       "base-uri 'self'",
