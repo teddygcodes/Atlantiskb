@@ -14,15 +14,8 @@ import {
 import type { DailyPrice } from '@/lib/comex/fetch-prices'
 import type { MAPoint } from '@/lib/comex/moving-average'
 import type { Prediction } from '@/lib/comex/predictions'
-import type {
-  IndicatorPoint,
-  MACDPoint,
-  BollingerPoint,
-  StochasticPoint,
-  TechnicalSummary,
-} from '@/lib/comex/technical-indicators'
 import { METAL_CONFIG, METAL_KEYS, type MetalKey } from '@/lib/comex/constants'
-import type { ScenarioData } from '@/lib/comex/types'
+import type { ScenarioData, TechnicalsResponse } from '@/lib/comex/types'
 import AgentPanel from './components/AgentPanel'
 import TechnicalChart from '@/components/comex/TechnicalChart'
 import IndicatorPanel from '@/components/comex/IndicatorPanel'
@@ -38,23 +31,6 @@ interface MetalData {
 }
 
 type PricesResponse = Partial<Record<MetalKey, MetalData>>
-
-interface TechnicalsResponse {
-  metal: string
-  currentPrice: number
-  computedAt: string
-  summary: TechnicalSummary
-  indicators: {
-    sma: { sma10: IndicatorPoint[]; sma30: IndicatorPoint[]; sma50: IndicatorPoint[] }
-    rsi: IndicatorPoint[]
-    macd: MACDPoint[]
-    bollinger: BollingerPoint[]
-    stochastic: StochasticPoint[]
-    atr: IndicatorPoint[]
-  }
-  supportResistance: { support: number[]; resistance: number[] }
-  priceHistory: Array<{ date: string; open: number | null; high: number | null; low: number | null; close: number }>
-}
 
 // ── Chart data merge ─────────────────────────────────────────────────────────
 
@@ -128,7 +104,7 @@ function PredictionGrid({ predictions, unit }: { predictions: Prediction[]; unit
   if (!predictions.length) {
     return (
       <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 12 }}>
-        Insufficient data for predictions (need ≥14 days)
+        Insufficient data for linear trend (need ≥14 days)
       </p>
     )
   }
@@ -151,7 +127,7 @@ function PredictionGrid({ predictions, unit }: { predictions: Prediction[]; unit
           }}
         >
           <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>
-            +{p.days}d forecast
+            +{p.days}d linear trend
           </div>
           <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>
             {fmt(p.price, 4)}
@@ -218,7 +194,7 @@ function MetalChart({ data, unit }: { data: MetalData; unit: string }) {
               const labels: Record<string, string> = {
                 close: 'Close',
                 ma30: 'MA 30',
-                prediction: 'Forecast',
+                prediction: 'Linear trend',
               }
               const num = typeof value === 'number' ? value : Number(value)
               return [num.toFixed(4), labels[String(name)] ?? String(name)]
@@ -234,7 +210,7 @@ function MetalChart({ data, unit }: { data: MetalData; unit: string }) {
           <Legend
             wrapperStyle={{ fontSize: 11, paddingTop: 6 }}
             formatter={(value) =>
-              value === 'close' ? 'Close' : value === 'ma30' ? 'MA 30' : 'Forecast'
+              value === 'close' ? 'Close' : value === 'ma30' ? 'MA 30' : 'Linear trend'
             }
           />
           <Line
@@ -542,7 +518,7 @@ export default function ComexPage() {
               COMEX Metals Pricing
             </h1>
             <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--text-secondary)' }}>
-              Copper &amp; Aluminum futures · Yahoo Finance · 90-day history + forecast
+              Copper &amp; Aluminum futures · Yahoo Finance · 90-day history + technical analysis
             </p>
           </div>
 

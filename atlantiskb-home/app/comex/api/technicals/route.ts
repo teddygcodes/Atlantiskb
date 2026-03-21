@@ -11,15 +11,8 @@ import {
   findSupportResistance,
   computeTechnicalSummary,
 } from '@/lib/comex/technical-indicators'
-import type {
-  OHLC,
-  IndicatorPoint,
-  MACDPoint,
-  BollingerPoint,
-  StochasticPoint,
-  TechnicalSummary,
-  SupportResistance,
-} from '@/lib/comex/technical-indicators'
+import type { OHLC, SupportResistance } from '@/lib/comex/technical-indicators'
+import type { TechnicalsResponse } from '@/lib/comex/types'
 
 // ---------------------------------------------------------------------------
 // In-memory cache
@@ -32,37 +25,6 @@ interface CacheEntry {
 
 const cache = new Map<string, CacheEntry>()
 const CACHE_TTL_MS = 60_000
-
-// ---------------------------------------------------------------------------
-// Response shape
-// ---------------------------------------------------------------------------
-
-interface TechnicalsResponse {
-  metal: string
-  currentPrice: number
-  computedAt: string
-  summary: TechnicalSummary
-  indicators: {
-    sma: {
-      sma10: IndicatorPoint[]
-      sma30: IndicatorPoint[]
-      sma50: IndicatorPoint[]
-    }
-    rsi: IndicatorPoint[]
-    macd: MACDPoint[]
-    bollinger: BollingerPoint[]
-    stochastic: StochasticPoint[]
-    atr: IndicatorPoint[]
-  }
-  supportResistance: SupportResistance
-  priceHistory: Array<{
-    date: string
-    open: number | null
-    high: number | null
-    low: number | null
-    close: number
-  }>
-}
 
 // ---------------------------------------------------------------------------
 // GET /comex/api/technicals?metal=copper

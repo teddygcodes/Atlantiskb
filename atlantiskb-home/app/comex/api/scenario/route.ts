@@ -185,11 +185,59 @@ Base scenario ranges on: current ATR for short-term ranges, Bollinger bandwidth 
   try {
     // Strip any accidental markdown code fences
     const cleaned = rawText.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '').trim()
-    scenarioData = JSON.parse(cleaned) as ScenarioData
+    const parsed = JSON.parse(cleaned) as Record<string, unknown>
+    if (!isValidScenarioData(parsed)) {
+      console.error('[comex-scenario] Invalid scenario shape', JSON.stringify(parsed).slice(0, 500))
+      return NextResponse.json({ error: 'scenario_generation_failed' }, { status: 500 })
+    }
+    scenarioData = parsed as unknown as ScenarioData
   } catch (err) {
     console.error('[comex-scenario] JSON parse error', err, rawText.slice(0, 500))
     return NextResponse.json({ error: 'scenario_generation_failed' }, { status: 500 })
   }
 
   return NextResponse.json(scenarioData)
+}
+
+function isRange(v: unknown): v is { low: number; high: number } {
+  return (
+    typeof v === 'object' &&
+    v !== null &&
+    typeof (v as Record<string, unknown>).low === 'number' &&
+    typeof (v as Record<string, unknown>).high === 'number'
+  )
+}
+
+function isScenarioHorizon(v: unknown): boolean {
+  if (typeof v !== 'object' || v === null) return false
+  const h = v as Record<string, unknown>
+  return (
+    isRange(h['1week']) &&
+    isRange(h['30day']) &&
+    isRange(h['90day']) &&
+    typeof h.catalyst === 'string'
+  )
+}
+
+function isValidScenarioData(v: Record<string, unknown>): boolean {
+  const scenarios = v.scenarios as Record<string, unknown> | undefined
+  const keyLevels = v.keyLevels as Record<string, unknown> | undefined
+  return (
+    typeof v.metal === 'string' &&
+    typeof v.currentPrice === 'number' &&
+    typeof v.asOfDate === 'string' &&
+    typeof scenarios === 'object' &&
+    scenarios !== null &&
+    isScenarioHorizon(scenarios.bull) &&
+    isScenarioHorizon(scenarios.base) &&
+    isScenarioHorizon(scenarios.bear) &&
+    typeof keyLevels === 'object' &&
+    keyLevels !== null &&
+    typeof keyLevels.strongSupport === 'number' &&
+    typeof keyLevels.support === 'number' &&
+    typeof keyLevels.resistance === 'number' &&
+    typeof keyLevels.strongResistance === 'number' &&
+    typeof v.technicalBias === 'string' &&
+    typeof v.summary === 'string'
+  )
 }
