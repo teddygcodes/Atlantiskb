@@ -73,7 +73,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const recentNews = await db.newsArticle.findMany({
     where: {
       publishedAt: { gte: sevenDaysAgo },
-      metal: { in: [metal === 'copper' ? 'copper' : 'aluminum', 'both'] },
+      metal: { in: [metal, 'both'] },
     },
     orderBy: { publishedAt: 'desc' },
     take: 10,
