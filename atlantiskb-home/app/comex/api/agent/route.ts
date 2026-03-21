@@ -2,6 +2,9 @@ import { auth } from '@clerk/nextjs/server'
 import { METAL_KEYS, type MetalKey } from '@/lib/comex/constants'
 import { buildRAGContext, type RetrievalMode } from '@/lib/comex/rag'
 import { getComexSchemaReadiness } from '@/lib/comex/schema-readiness'
+import { db } from '@/lib/db'
+import { computeTechnicalSummary } from '@/lib/comex/technical-indicators'
+import type { OHLC } from '@/lib/comex/technical-indicators'
 
 type SetupStage = 'auth' | 'validation' | 'config' | 'embedding' | 'vector_retrieval' | 'anthropic'
 type ErrorCode =
@@ -58,7 +61,8 @@ function normalizeHistory(history: unknown): HistoryTurn[] {
     .filter((turn): turn is HistoryTurn => turn !== null)
 }
 
-function buildSystemPrompt(contextJson: string): string {
+function buildSystemPrompt(contextJson: string, technicalContext?: string): string {
+  const technicalSection = technicalContext ?? ''
   return `You are an internal COMEX pricing desk for Atlantiskb. Sales reps use your answers before quoting jobs. They need fast, specific numbers — not analysis essays.
 
 RESPONSE FORMAT (required for every price/forecast question):
@@ -68,6 +72,49 @@ Example format:
 Copper: $5.37/lb now → ~$5.25-5.45/lb next Wednesday. Sideways to slightly soft, 30-day downtrend still in play. Confidence: low.
 
 Aluminum: $3,127/ton now → ~$3,100-3,200/ton next Wednesday. Grinding higher, supply tightness driving momentum. Confidence: medium.
+
+TECHNICAL ANALYSIS:
+When asked about technical indicators, explain simply and directly using these patterns:
+- RSI > 70: "Copper is overbought — could see a pullback."
+- RSI < 30: "Copper is oversold — watch for a bounce."
+- RSI 30-70: "RSI is neutral at {value} — no extreme signal."
+- MACD histogram positive: "Momentum is building."
+- MACD histogram negative: "Momentum is fading."
+- Price near Bollinger upper band: "Price is at the top of its recent range."
+- Price near Bollinger lower band: "Price is at the bottom of its recent range."
+- Narrow Bollinger bands (bandwidth < 0.05): "Volatility is compressed — a big move is likely coming, direction unclear."
+- SMA10 > SMA30 > SMA50: "Short-term trend is bullish — all moving averages aligned upward."
+- SMA10 < SMA30 < SMA50: "Short-term trend is bearish — all moving averages aligned downward."
+
+DISTINGUISH between three answer types:
+1. DESCRIPTIVE (what data shows right now): State facts directly. No hedging. E.g. "RSI is 42, neutral."
+2. CONDITIONAL (if/then levels): Frame as levels to watch. E.g. "If copper holds above $5.15, the base case holds. Break below that, watch $4.98."
+3. SCENARIO OUTLOOK (where price might go): Present as bull/base/bear with catalysts. Never assign probability percentages. Always end with "Not financial or purchasing advice."
+
+When asked about "should I lock in pricing", "should I buy now", or similar purchasing decisions:
+- Give the technical picture (descriptive)
+- State key levels to watch (conditional)
+- Note the overall technical signal
+- End with: "Not financial or purchasing advice."
+
+FORMAT for scenario outlook responses (when you receive scenario data in context):
+{Metal} scenario outlook ({date}):
+Current: \${price}/lb | Technical bias: {bias}
+
+              1 week        30 day        90 day
+Bull:         \${range}      \${range}      \${range}
+Base:         \${range}      \${range}      \${range}
+Bear:         \${range}      \${range}      \${range}
+
+Key levels: Support \${level} | Resistance \${level}
+
+Bull catalyst: {catalyst}
+Bear catalyst: {catalyst}
+
+{1-2 sentence summary}
+Not financial or purchasing advice.
+
+Keep it tight. No essays. Lead with numbers.
 
 Rules:
 1. First line = current price + near-term range. Always. No exceptions.
@@ -80,7 +127,7 @@ Rules:
 8. End with: *Not financial advice.*
 
 Context:
-${contextJson}`
+${contextJson}${technicalSection}`
 }
 
 function getRequestId(req: Request): string {
@@ -216,6 +263,49 @@ export async function POST(req: Request): Promise<Response> {
   const history = normalizeHistory(body.history)
   const schemaReadiness = await getComexSchemaReadiness()
 
+  // Detect technical analysis questions — inject indicator data if relevant
+  const TECHNICAL_KEYWORDS = ['rsi', 'macd', 'bollinger', 'support', 'resistance', 'overbought', 'oversold', 'trend', 'moving average', 'sma', 'ema', 'stochastic', 'atr', 'volatility', 'technical', 'indicator', 'breakout', 'breakdown', 'level']
+  const isTechnicalQuestion = TECHNICAL_KEYWORDS.some(kw => question.toLowerCase().includes(kw))
+
+  let technicalContext = ''
+  if (isTechnicalQuestion) {
+    try {
+      const technicalData = await Promise.all(
+        metals.map(async (metal) => {
+          const rows = await db.commodityPrice.findMany({
+            where: { metal },
+            orderBy: { settlementDate: 'desc' },
+            take: 365,
+          })
+          const ohlcData: OHLC[] = rows.reverse().map(row => ({
+            date: row.settlementDate.toISOString().slice(0, 10),
+            open: row.open ?? null,
+            high: row.high ?? null,
+            low: row.low ?? null,
+            close: row.close,
+          }))
+          if (ohlcData.length === 0) return null
+          const summary = computeTechnicalSummary(ohlcData, metal)
+          return { metal, summary }
+        })
+      )
+
+      const validData = technicalData.filter(Boolean)
+      if (validData.length > 0) {
+        technicalContext = '\n\nCURRENT TECHNICAL DATA:\n' + validData.map(d => {
+          const s = d!.summary
+          return `${d!.metal.toUpperCase()}:
+  Price: $${s.currentPrice} | Trend: ${s.trendDirection} | Overall signal: ${s.overallSignal}
+  RSI(14): ${s.rsi14 ?? 'N/A'} (${s.rsiSignal}) | MACD: ${s.macdSignal} | Bollinger: ${s.bollingerPosition}
+  Support: ${s.support.join(', ') || 'N/A'} | Resistance: ${s.resistance.join(', ') || 'N/A'}
+  ATR(14): ${s.atr14 ?? 'N/A'} | Volatility: ${s.volatility}`
+        }).join('\n\n')
+      }
+    } catch {
+      // If technical data fails, continue without it — don't block the response
+    }
+  }
+
   let ragContext
   let retrievalMode: RetrievalMode = 'none'
   if (schemaReadiness.degraded) {
@@ -268,7 +358,7 @@ export async function POST(req: Request): Promise<Response> {
     }
   }
 
-  const system = buildSystemPrompt(JSON.stringify(ragContext, null, 2))
+  const system = buildSystemPrompt(JSON.stringify(ragContext, null, 2), technicalContext || undefined)
 
   const messages = [
     ...history.slice(-6).map((turn) => ({ role: turn.role, content: turn.content })),

@@ -55,3 +55,6 @@ next-env.d.ts
 
 # committed env template
 !.env.local.example
+
+# Git worktrees
+.worktrees/
