@@ -155,45 +155,11 @@ export function ema(data: OHLC[], period: number): IndicatorPoint[] {
  * Returns 0–100 scale.
  */
 export function rsi(data: OHLC[], period: number = 14): IndicatorPoint[] {
-  const result: IndicatorPoint[] = []
-
-  // Need at least period+1 bars to produce first RSI value (period changes)
-  for (let i = 0; i < data.length; i++) {
-    if (i < period) {
-      result.push({ date: data[i].date, value: null })
-      continue
-    }
-
-    if (i === period) {
-      // Seed: simple average of first `period` gains and losses
-      let avgGain = 0
-      let avgLoss = 0
-      for (let j = 1; j <= period; j++) {
-        const change = data[j].close - data[j - 1].close
-        if (change > 0) avgGain += change
-        else avgLoss += Math.abs(change)
-      }
-      avgGain /= period
-      avgLoss /= period
-
-      // Store running values in a side structure — we'll compute via closure
-      // Re-seed from scratch each time would be O(n^2); instead we track state
-      // outside the loop. We break here and restart with Wilder's smoothing.
-      // (handled below via the seeded-EMA approach)
-      const rs = avgLoss === 0 ? Infinity : avgGain / avgLoss
-      const rsiValue = avgLoss === 0 ? 100 : 100 - 100 / (1 + rs)
-      result.push({ date: data[i].date, value: rsiValue })
-    } else {
-      // Wilder's smoothing: use previous avgGain/avgLoss
-      // We need to reconstruct avgGain/avgLoss at each step — track via re-scan
-      // For correctness, recompute from seed at i===period then smooth forward.
-      // The loop above only handles i===period; for i>period we fall through here.
-      // We'll fix this by computing RSI in a single pass below.
-      result.push({ date: data[i].date, value: null }) // placeholder, replaced below
-    }
-  }
-
-  // Single-pass Wilder RSI computation, overwriting placeholders
+  // Build warm-up nulls for the first `period` bars
+  const result: IndicatorPoint[] = data.slice(0, period).map((bar) => ({
+    date: bar.date,
+    value: null,
+  }))
   if (data.length <= period) return result
 
   // Seed
@@ -393,27 +359,35 @@ export function findSupportResistance(
     const weight = (lookback - distFromEnd) / lookback
 
     // Local minimum (support candidate)
+    // Leading neighbors use strict > so that flat-bottom supports register;
+    // trailing neighbors allow >= to handle equal lows on the right side.
     const low = bar.low ?? bar.close
     let isMin = true
-    for (let j = i - wing; j <= i + wing; j++) {
-      if (j === i) continue
+    for (let j = i - wing; j < i; j++) {
       const cmp = slice[j].low ?? slice[j].close
-      if (cmp <= low) {
-        isMin = false
-        break
+      if (cmp <= low) { isMin = false; break }
+    }
+    if (isMin) {
+      for (let j = i + 1; j <= i + wing; j++) {
+        const cmp = slice[j].low ?? slice[j].close
+        if (cmp < low) { isMin = false; break }
       }
     }
     if (isMin) pivots.push({ price: low, weight })
 
     // Local maximum (resistance candidate)
+    // Leading neighbors use strict < so that flat-top resistances register;
+    // trailing neighbors allow <= to handle equal highs on the right side.
     const high = bar.high ?? bar.close
     let isMax = true
-    for (let j = i - wing; j <= i + wing; j++) {
-      if (j === i) continue
+    for (let j = i - wing; j < i; j++) {
       const cmp = slice[j].high ?? slice[j].close
-      if (cmp >= high) {
-        isMax = false
-        break
+      if (cmp >= high) { isMax = false; break }
+    }
+    if (isMax) {
+      for (let j = i + 1; j <= i + wing; j++) {
+        const cmp = slice[j].high ?? slice[j].close
+        if (cmp > high) { isMax = false; break }
       }
     }
     if (isMax) pivots.push({ price: high, weight })
@@ -460,8 +434,11 @@ export function findSupportResistance(
 
 /**
  * True Range = max(high - low, abs(high - prevClose), abs(low - prevClose))
- * ATR = SMA of True Range over period.
- * Returns null for bars with null high or low.
+ * ATR = Wilder's smoothed moving average (RMA) of True Range over period.
+ * Seed: simple average of first `period` True Range values.
+ * Subsequent: ATR[i] = (ATR[i-1] * (period - 1) + TR[i]) / period
+ * Returns null for bars with null high or low, or if any bar in the seed
+ * window has a null TR (treat whole seed window as invalid).
  * Warm-up: first `period` values are null.
  */
 export function atr(data: OHLC[], period: number = 14): IndicatorPoint[] {
@@ -475,25 +452,35 @@ export function atr(data: OHLC[], period: number = 14): IndicatorPoint[] {
     return Math.max(bar.high - bar.low, Math.abs(bar.high - prevClose), Math.abs(bar.low - prevClose))
   })
 
-  for (let i = 0; i < data.length; i++) {
-    if (i < period) {
-      result.push({ date: data[i].date, value: null })
-      continue
-    }
+  // Warm-up nulls
+  for (let i = 0; i < period; i++) {
+    result.push({ date: data[i].date, value: null })
+  }
 
-    // SMA of true ranges in window [i-period+1, i]
-    // If any TR in the window is null, return null
-    let sum = 0
-    let valid = true
-    for (let j = i - period + 1; j <= i; j++) {
-      if (trueRanges[j] === null) {
-        valid = false
-        break
-      }
-      sum += trueRanges[j] as number
-    }
+  if (data.length <= period) return result
 
-    result.push({ date: data[i].date, value: valid ? sum / period : null })
+  // Seed: simple average of first `period` TR values
+  let seedSum = 0
+  let seedValid = true
+  for (let j = 0; j < period; j++) {
+    if (trueRanges[j] === null) {
+      seedValid = false
+      break
+    }
+    seedSum += trueRanges[j] as number
+  }
+
+  let currentATR: number | null = seedValid ? seedSum / period : null
+  result.push({ date: data[period].date, value: currentATR })
+
+  // Wilder's RMA: ATR[i] = (ATR[i-1] * (period - 1) + TR[i]) / period
+  for (let i = period + 1; i < data.length; i++) {
+    if (currentATR === null || trueRanges[i] === null) {
+      currentATR = null
+    } else {
+      currentATR = (currentATR * (period - 1) + (trueRanges[i] as number)) / period
+    }
+    result.push({ date: data[i].date, value: currentATR })
   }
 
   return result
@@ -576,11 +563,33 @@ export function stochastic(data: OHLC[], period: number = 14): StochasticPoint[]
 }
 
 // ---------------------------------------------------------------------------
-// Helper: last non-null value in IndicatorPoint array
+// Helpers: last non-null value extractors
 // ---------------------------------------------------------------------------
+
 function lastValue(points: IndicatorPoint[]): number | null {
   for (let i = points.length - 1; i >= 0; i--) {
     if (points[i].value !== null) return points[i].value
+  }
+  return null
+}
+
+function lastMACDPoint(points: MACDPoint[]): MACDPoint | null {
+  for (let i = points.length - 1; i >= 0; i--) {
+    if (points[i].histogram !== null) return points[i]
+  }
+  return null
+}
+
+function lastBollingerPoint(points: BollingerPoint[]): BollingerPoint | null {
+  for (let i = points.length - 1; i >= 0; i--) {
+    if (points[i].upper !== null) return points[i]
+  }
+  return null
+}
+
+function lastStochasticPoint(points: StochasticPoint[]): StochasticPoint | null {
+  for (let i = points.length - 1; i >= 0; i--) {
+    if (points[i].k !== null) return points[i]
   }
   return null
 }
@@ -619,35 +628,18 @@ export function computeTechnicalSummary(data: OHLC[], metal: string): TechnicalS
   const atr14 = lastValue(atr14Points)
 
   // MACD: find last non-null histogram
-  let macdHistogram: number | null = null
-  for (let i = macdPoints.length - 1; i >= 0; i--) {
-    if (macdPoints[i].histogram !== null) {
-      macdHistogram = macdPoints[i].histogram
-      break
-    }
-  }
+  const latestMACD = lastMACDPoint(macdPoints)
+  const macdHistogram: number | null = latestMACD?.histogram ?? null
 
   // Stochastic: find last non-null k
-  let stochasticK: number | null = null
-  for (let i = stochasticPoints.length - 1; i >= 0; i--) {
-    if (stochasticPoints[i].k !== null) {
-      stochasticK = stochasticPoints[i].k
-      break
-    }
-  }
+  const latestStochastic = lastStochasticPoint(stochasticPoints)
+  const stochasticK: number | null = latestStochastic?.k ?? null
 
   // Bollinger: find last non-null point
-  let bollingerUpper: number | null = null
-  let bollingerLower: number | null = null
-  let bollingerBandwidth: number | null = null
-  for (let i = bollingerPoints.length - 1; i >= 0; i--) {
-    if (bollingerPoints[i].upper !== null) {
-      bollingerUpper = bollingerPoints[i].upper
-      bollingerLower = bollingerPoints[i].lower
-      bollingerBandwidth = bollingerPoints[i].bandwidth
-      break
-    }
-  }
+  const latestBollinger = lastBollingerPoint(bollingerPoints)
+  const bollingerUpper: number | null = latestBollinger?.upper ?? null
+  const bollingerLower: number | null = latestBollinger?.lower ?? null
+  const bollingerBandwidth: number | null = latestBollinger?.bandwidth ?? null
 
   // ---------------------------------------------------------------------------
   // Signal counting
