@@ -132,16 +132,22 @@ function buildChartData(
     const bearHigh = currentPrice + t * (horizonData.bear[horizon].high - currentPrice)
     const bearLow = currentPrice + t * (horizonData.bear[horizon].low - currentPrice)
 
+    // Clip bands so they don't overlap: bear < base < bull in price space
+    const adjBearHigh = Math.min(bearHigh, baseLow, bullLow)
+    const adjBaseLow = Math.max(baseLow, adjBearHigh)
+    const adjBaseHigh = Math.min(baseHigh, bullLow)
+    const adjBullLow = Math.max(bullLow, adjBaseHigh)
+
     return {
       date,
       close: null,
       isForecast: true as const,
-      bullBase: bullLow,
-      bullDelta: bullHigh - bullLow,
-      baseBase: baseLow,
-      baseDelta: baseHigh - baseLow,
       bearBase: bearLow,
-      bearDelta: bearHigh - bearLow,
+      bearDelta: Math.max(0, adjBearHigh - bearLow),
+      baseBase: adjBaseLow,
+      baseDelta: Math.max(0, adjBaseHigh - adjBaseLow),
+      bullBase: adjBullLow,
+      bullDelta: Math.max(0, bullHigh - adjBullLow),
     }
   })
 
@@ -262,18 +268,20 @@ export default function ScenarioChart({
             tickFormatter={(v: number) => `$${v.toFixed(2)}`}
           />
           <Tooltip
-            formatter={(value, name) => {
-              const labels: Record<string, string> = {
-                close: 'Close',
-                bullBase: 'Bull Low',
-                bullDelta: 'Bull Range',
-                baseBase: 'Base Low',
-                baseDelta: 'Base Range',
-                bearBase: 'Bear Low',
-                bearDelta: 'Bear Range',
-              }
-              const num = value == null ? null : Number(value)
-              return [num != null ? `$${num.toFixed(3)}` : '—', labels[String(name)] ?? String(name)]
+            formatter={(value, name, _item, _index, payload) => {
+              if (name === 'close') return [`$${Number(value).toFixed(2)}`, 'Price']
+              // Hide transparent spacer entries
+              if (['bullBase', 'baseBase', 'bearBase'].includes(String(name))) return [null, null]
+              // For delta entries show actual low–high range
+              const baseKey = String(name).replace('Delta', 'Base')
+              const baseVal = (payload as { dataKey: string; value: number }[])?.find(
+                (p) => p.dataKey === baseKey
+              )?.value ?? 0
+              const low = Number(baseVal)
+              const high = low + Number(value)
+              const labels: Record<string, string> = { bullDelta: 'Bull', baseDelta: 'Base', bearDelta: 'Bear' }
+              if (Number(value) <= 0) return [null, null]
+              return [`$${low.toFixed(2)} – $${high.toFixed(2)}`, labels[String(name)] ?? '']
             }}
             labelFormatter={(label) => formatDate(String(label))}
             contentStyle={{
@@ -291,55 +299,7 @@ export default function ScenarioChart({
             label={{ value: 'Now', position: 'top', fontSize: 10 }}
           />
 
-          {/* Bull band: transparent base + green fill */}
-          <Area
-            dataKey="bullBase"
-            fill="transparent"
-            stroke="none"
-            stackId="bull"
-            connectNulls={false}
-            dot={false}
-            legendType="none"
-            isAnimationActive={false}
-          />
-          <Area
-            dataKey="bullDelta"
-            fill="rgba(34,197,94,0.15)"
-            stroke="rgba(34,197,94,0.4)"
-            stackId="bull"
-            strokeWidth={1}
-            connectNulls={false}
-            dot={false}
-            legendType="none"
-            isAnimationActive={false}
-            label={<BandLabel value="Bull" color="rgba(34,197,94,0.8)" />}
-          />
-
-          {/* Base band: transparent base + blue fill */}
-          <Area
-            dataKey="baseBase"
-            fill="transparent"
-            stroke="none"
-            stackId="base"
-            connectNulls={false}
-            dot={false}
-            legendType="none"
-            isAnimationActive={false}
-          />
-          <Area
-            dataKey="baseDelta"
-            fill="rgba(59,130,246,0.12)"
-            stroke="rgba(59,130,246,0.3)"
-            stackId="base"
-            strokeWidth={1}
-            connectNulls={false}
-            dot={false}
-            legendType="none"
-            isAnimationActive={false}
-            label={<BandLabel value="Base" color="rgba(59,130,246,0.8)" />}
-          />
-
-          {/* Bear band: transparent base + red fill */}
+          {/* Bear band: transparent spacer + red fill */}
           <Area
             dataKey="bearBase"
             fill="transparent"
@@ -352,15 +312,63 @@ export default function ScenarioChart({
           />
           <Area
             dataKey="bearDelta"
-            fill="rgba(239,68,68,0.12)"
-            stroke="rgba(239,68,68,0.3)"
+            fill="rgba(239,68,68,0.2)"
+            stroke="rgba(239,68,68,1)"
             stackId="bear"
-            strokeWidth={1}
+            strokeWidth={1.5}
             connectNulls={false}
             dot={false}
             legendType="none"
             isAnimationActive={false}
-            label={<BandLabel value="Bear" color="rgba(239,68,68,0.8)" />}
+            label={<BandLabel value="Bear" color="rgba(239,68,68,1)" />}
+          />
+
+          {/* Base band: transparent spacer + blue fill */}
+          <Area
+            dataKey="baseBase"
+            fill="transparent"
+            stroke="none"
+            stackId="base"
+            connectNulls={false}
+            dot={false}
+            legendType="none"
+            isAnimationActive={false}
+          />
+          <Area
+            dataKey="baseDelta"
+            fill="rgba(59,130,246,0.2)"
+            stroke="rgba(59,130,246,1)"
+            stackId="base"
+            strokeWidth={1.5}
+            connectNulls={false}
+            dot={false}
+            legendType="none"
+            isAnimationActive={false}
+            label={<BandLabel value="Base" color="rgba(59,130,246,1)" />}
+          />
+
+          {/* Bull band: transparent spacer + green fill */}
+          <Area
+            dataKey="bullBase"
+            fill="transparent"
+            stroke="none"
+            stackId="bull"
+            connectNulls={false}
+            dot={false}
+            legendType="none"
+            isAnimationActive={false}
+          />
+          <Area
+            dataKey="bullDelta"
+            fill="rgba(34,197,94,0.2)"
+            stroke="rgba(34,197,94,1)"
+            stackId="bull"
+            strokeWidth={1.5}
+            connectNulls={false}
+            dot={false}
+            legendType="none"
+            isAnimationActive={false}
+            label={<BandLabel value="Bull" color="rgba(34,197,94,1)" />}
           />
 
           {/* Historical close line */}
