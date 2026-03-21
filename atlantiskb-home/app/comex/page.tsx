@@ -476,9 +476,9 @@ export default function ComexPage() {
   }
 
   async function generateScenario(metal: MetalKey) {
-    const setLoading = metal === 'copper' ? setCopperScenarioLoading : setAluminumScenarioLoading
+    const setScenarioLoading = metal === 'copper' ? setCopperScenarioLoading : setAluminumScenarioLoading
     const setScenario = metal === 'copper' ? setCopperScenario : setAluminumScenario
-    setLoading(true)
+    setScenarioLoading(true)
     try {
       const res = await fetch('/comex/api/scenario', {
         method: 'POST',
@@ -491,7 +491,7 @@ export default function ComexPage() {
     } catch (err) {
       console.error('generateScenario error:', err)
     } finally {
-      setLoading(false)
+      setScenarioLoading(false)
     }
   }
 
