@@ -61,7 +61,6 @@ interface TechnicalsResponse {
     high: number | null
     low: number | null
     close: number
-    ma30: number | null
   }>
 }
 
@@ -113,11 +112,8 @@ export async function GET(request: NextRequest) {
     close: row.close,
   }))
 
-  // 6. Build sma30Points from DB ma30 field (not recomputed)
-  const sma30Points: IndicatorPoint[] = rows.map((row) => ({
-    date: row.settlementDate.toISOString().slice(0, 10),
-    value: row.ma30 ?? null,
-  }))
+  // 6. Compute SMA30 from OHLC data (DB ma30 field is not populated by sync route)
+  const sma30Points = sma(ohlcData, 30)
 
   // 7. Compute technical indicators
   const sma10Points = sma(ohlcData, 10)
@@ -130,14 +126,13 @@ export async function GET(request: NextRequest) {
   const supportResistance = findSupportResistance(ohlcData)
   const summary = computeTechnicalSummary(ohlcData, metalParam)
 
-  // 8. Build price history with ma30 from DB
+  // 8. Build price history
   const priceHistory = rows.map((row) => ({
     date: row.settlementDate.toISOString().slice(0, 10),
     open: row.open ?? null,
     high: row.high ?? null,
     low: row.low ?? null,
     close: row.close,
-    ma30: row.ma30 ?? null,
   }))
 
   // Current price = last close
