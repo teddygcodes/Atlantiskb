@@ -22,9 +22,12 @@ import type {
   TechnicalSummary,
 } from '@/lib/comex/technical-indicators'
 import { METAL_CONFIG, METAL_KEYS, type MetalKey } from '@/lib/comex/constants'
+import type { ScenarioData } from '@/lib/comex/types'
 import AgentPanel from './components/AgentPanel'
 import TechnicalChart from '@/components/comex/TechnicalChart'
 import IndicatorPanel from '@/components/comex/IndicatorPanel'
+import ScenarioChart from '@/components/comex/ScenarioChart'
+import ScenarioTable from '@/components/comex/ScenarioTable'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -273,13 +276,23 @@ function MetalCard({
   data,
   technicals,
   technicalsLoading,
+  scenarioData,
+  scenarioLoading,
+  onGenerateScenario,
 }: {
   metalKey: MetalKey
   data: MetalData
   technicals: TechnicalsResponse | null
   technicalsLoading: boolean
+  scenarioData: ScenarioData | null
+  scenarioLoading: boolean
+  onGenerateScenario: (metal: MetalKey) => void
 }) {
   const config = METAL_CONFIG[metalKey]
+  const currentPrice = data.history[data.history.length - 1]?.close ?? 0
+  const last90days = data.history.slice(-90).map((p) => ({ date: p.date, close: p.close }))
+  const metalLabel = config.name
+
   return (
     <div
       style={{
@@ -333,8 +346,26 @@ function MetalCard({
               priceHistory: technicals.priceHistory,
             }}
           />
-          {/* Placeholder for Task 4: Generate Outlook button */}
-          <div style={{ marginTop: 16 }} />
+          {/* Generate Outlook button */}
+          <div style={{ marginTop: 16 }}>
+            <button
+              onClick={() => onGenerateScenario(metalKey)}
+              disabled={scenarioLoading}
+              className={`px-4 py-2 text-sm rounded font-medium ${scenarioLoading ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-red-600 text-white hover:bg-red-700'}`}
+            >
+              {scenarioLoading ? 'Generating outlook...' : `Generate ${metalLabel} Outlook`}
+            </button>
+          </div>
+
+          {/* Scenario results */}
+          {scenarioData && (
+            <div style={{ marginTop: 16 }}>
+              <ScenarioChart scenario={scenarioData} priceHistory={last90days} currentPrice={currentPrice} />
+              <div style={{ marginTop: 12 }}>
+                <ScenarioTable scenario={scenarioData} />
+              </div>
+            </div>
+          )}
         </>
       )}
     </div>
@@ -403,6 +434,10 @@ export default function ComexPage() {
   const [copperTechnicals, setCopperTechnicals] = useState<TechnicalsResponse | null>(null)
   const [aluminumTechnicals, setAluminumTechnicals] = useState<TechnicalsResponse | null>(null)
   const [technicalsLoading, setTechnicalsLoading] = useState(true)
+  const [copperScenario, setCopperScenario] = useState<ScenarioData | null>(null)
+  const [aluminumScenario, setAluminumScenario] = useState<ScenarioData | null>(null)
+  const [copperScenarioLoading, setCopperScenarioLoading] = useState(false)
+  const [aluminumScenarioLoading, setAluminumScenarioLoading] = useState(false)
 
   async function loadPrices() {
     try {
@@ -437,6 +472,26 @@ export default function ComexPage() {
       // silently fail — don't break existing UI
     } finally {
       setTechnicalsLoading(false)
+    }
+  }
+
+  async function generateScenario(metal: MetalKey) {
+    const setLoading = metal === 'copper' ? setCopperScenarioLoading : setAluminumScenarioLoading
+    const setScenario = metal === 'copper' ? setCopperScenario : setAluminumScenario
+    setLoading(true)
+    try {
+      const res = await fetch('/comex/api/scenario', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ metal }),
+      })
+      if (!res.ok) throw new Error(`Scenario request failed: ${res.status}`)
+      const json: ScenarioData = await res.json()
+      setScenario(json)
+    } catch (err) {
+      console.error('generateScenario error:', err)
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -551,6 +606,8 @@ export default function ComexPage() {
               const metalData = data?.[metalKey]
               if (!metalData || metalData.history.length === 0) return null
               const technicals = metalKey === 'copper' ? copperTechnicals : aluminumTechnicals
+              const scenarioData = metalKey === 'copper' ? copperScenario : aluminumScenario
+              const scenarioLoading = metalKey === 'copper' ? copperScenarioLoading : aluminumScenarioLoading
               return (
                 <MetalCard
                   key={metalKey}
@@ -558,6 +615,9 @@ export default function ComexPage() {
                   data={metalData}
                   technicals={technicals}
                   technicalsLoading={technicalsLoading}
+                  scenarioData={scenarioData}
+                  scenarioLoading={scenarioLoading}
+                  onGenerateScenario={generateScenario}
                 />
               )
             })}
