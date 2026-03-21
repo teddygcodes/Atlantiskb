@@ -49,8 +49,8 @@ interface ChartPoint {
   sma10: number | null
   sma30: number | null
   sma50: number | null
-  bollingerUpper: number | null
-  bollingerDelta: number | null
+  bollingerLower: number | null  // base of the band fill (lower band value)
+  bollingerDelta: number | null  // upper - lower (stacked fill height)
 }
 
 function buildChartData(props: TechnicalChartProps['data']): ChartPoint[] {
@@ -65,6 +65,7 @@ function buildChartData(props: TechnicalChartProps['data']): ChartPoint[] {
     const bb = bollingerMap.get(p.date)
     const upper = bb?.upper ?? null
     const lower = bb?.lower ?? null
+    // stackId band: base Area uses bollingerLower, delta Area fills the gap
     const bollingerDelta = upper !== null && lower !== null ? upper - lower : null
 
     return {
@@ -73,7 +74,7 @@ function buildChartData(props: TechnicalChartProps['data']): ChartPoint[] {
       sma10: sma10Map.get(p.date) ?? null,
       sma30: sma30Map.get(p.date) ?? null,
       sma50: sma50Map.get(p.date) ?? null,
-      bollingerUpper: upper,
+      bollingerLower: lower,
       bollingerDelta,
     }
   })
@@ -169,7 +170,7 @@ export default function TechnicalChart({ data, metal }: TechnicalChartProps) {
           {/* Bollinger Bands shaded area */}
           <Area
             type="monotone"
-            dataKey="bollingerUpper"
+            dataKey="bollingerLower"
             fill="transparent"
             stroke="none"
             stackId="bollinger"
