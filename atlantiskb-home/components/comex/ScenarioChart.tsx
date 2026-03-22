@@ -280,7 +280,7 @@ export default function ScenarioChart({
               if (['bullBase', 'baseBase', 'bearBase'].includes(String(name))) return [null, null]
               // For delta entries show actual low–high range
               const baseKey = String(name).replace('Delta', 'Base')
-              const baseVal = (payload as { dataKey: string; value: number }[])?.find(
+              const baseVal = (payload as readonly { dataKey: string; value: number }[])?.find(
                 (p) => p.dataKey === baseKey
               )?.value ?? 0
               const low = Number(baseVal)
