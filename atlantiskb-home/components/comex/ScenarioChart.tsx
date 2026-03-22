@@ -132,22 +132,28 @@ function buildChartData(
     const bearHigh = currentPrice + t * (horizonData.bear[horizon].high - currentPrice)
     const bearLow = currentPrice + t * (horizonData.bear[horizon].low - currentPrice)
 
-    // Clip bands so they don't overlap: bear < base < bull in price space
-    const adjBearHigh = Math.min(bearHigh, baseLow, bullLow)
-    const adjBaseLow = Math.max(baseLow, adjBearHigh)
-    const adjBaseHigh = Math.min(baseHigh, bullLow)
-    const adjBullLow = Math.max(bullLow, adjBaseHigh)
+    // Enforce non-overlap: bear can't exceed bull low (clamp if AI ranges cross)
+    const adjBearHigh = Math.min(bearHigh, bullLow)
+    const adjBullLow  = Math.max(bullLow, adjBearHigh)
+
+    // Base band = the gap between bear top and bull bottom (inherently non-overlapping)
+    const bandBearLow  = bearLow
+    const bandBearHigh = adjBearHigh
+    const bandBaseLow  = adjBearHigh  // starts exactly where bear ends
+    const bandBaseHigh = adjBullLow   // ends exactly where bull starts
+    const bandBullLow  = adjBullLow
+    const bandBullHigh = bullHigh
 
     return {
       date,
       close: null,
       isForecast: true as const,
-      bearBase: bearLow,
-      bearDelta: Math.max(0, adjBearHigh - bearLow),
-      baseBase: adjBaseLow,
-      baseDelta: Math.max(0, adjBaseHigh - adjBaseLow),
-      bullBase: adjBullLow,
-      bullDelta: Math.max(0, bullHigh - adjBullLow),
+      bearBase:  bandBearLow,
+      bearDelta: Math.max(0, bandBearHigh - bandBearLow),
+      baseBase:  bandBaseLow,
+      baseDelta: Math.max(0, bandBaseHigh - bandBaseLow),
+      bullBase:  bandBullLow,
+      bullDelta: Math.max(0, bandBullHigh - bandBullLow),
     }
   })
 
@@ -312,15 +318,15 @@ export default function ScenarioChart({
           />
           <Area
             dataKey="bearDelta"
-            fill="rgba(239,68,68,0.2)"
-            stroke="rgba(239,68,68,1)"
+            fill="#fee2e2"
+            stroke="#ef4444"
             stackId="bear"
             strokeWidth={1.5}
             connectNulls={false}
             dot={false}
             legendType="none"
             isAnimationActive={false}
-            label={<BandLabel value="Bear" color="rgba(239,68,68,1)" />}
+            label={<BandLabel value="Bear" color="#ef4444" />}
           />
 
           {/* Base band: transparent spacer + blue fill */}
@@ -336,15 +342,15 @@ export default function ScenarioChart({
           />
           <Area
             dataKey="baseDelta"
-            fill="rgba(59,130,246,0.2)"
-            stroke="rgba(59,130,246,1)"
+            fill="#dbeafe"
+            stroke="#3b82f6"
             stackId="base"
             strokeWidth={1.5}
             connectNulls={false}
             dot={false}
             legendType="none"
             isAnimationActive={false}
-            label={<BandLabel value="Base" color="rgba(59,130,246,1)" />}
+            label={<BandLabel value="Base" color="#3b82f6" />}
           />
 
           {/* Bull band: transparent spacer + green fill */}
@@ -360,15 +366,15 @@ export default function ScenarioChart({
           />
           <Area
             dataKey="bullDelta"
-            fill="rgba(34,197,94,0.2)"
-            stroke="rgba(34,197,94,1)"
+            fill="#dcfce7"
+            stroke="#22c55e"
             stackId="bull"
             strokeWidth={1.5}
             connectNulls={false}
             dot={false}
             legendType="none"
             isAnimationActive={false}
-            label={<BandLabel value="Bull" color="rgba(34,197,94,1)" />}
+            label={<BandLabel value="Bull" color="#22c55e" />}
           />
 
           {/* Historical close line */}
