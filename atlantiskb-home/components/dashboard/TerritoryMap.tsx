@@ -61,7 +61,7 @@ function loadGoogleMapsScript(apiKey: string): Promise<void> {
     }
     // First time — inject the script
     const script = document.createElement('script')
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=maps&loading=async`
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=maps`
     script.async = true
     script.onload = () => resolve()
     script.onerror = () => reject(new Error('Google Maps script failed to load — check API key and billing'))
